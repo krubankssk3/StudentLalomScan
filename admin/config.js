@@ -11,7 +11,7 @@
 
 const CONFIG = {
   // 🔴 แก้ตรงนี้! ใส่ Web App URL ของคุณ (ลงท้าย /exec)
-  API_URL: 'https://script.google.com/macros/s/วาง_URL_ของคุณตรงนี้/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycbwrRfjbkz68tCpDuKbPTmmvkvLg_QIR8-P9gOIRtFGL9fcyiyBxKGKotrYlB0W79zgESA/exec',
 
   // ข้อมูลโรงเรียน (แสดงบนหน้าเว็บ)
   SCHOOL_NAME: 'โรงเรียนบ้านละลม',
