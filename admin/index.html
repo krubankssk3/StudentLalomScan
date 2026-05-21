@@ -1,1 +1,284 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ระบบจัดการจดหมายข่าว - ผู้ดูแล</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=Prompt:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.7.0/dist/tabler-icons.min.css" rel="stylesheet">
+<style>
+:root{
+  --bg:#F1F5F9; --card:#FFFFFF; --border:#E2E8F0;
+  --primary:#1E40AF; --primary-light:#3B82F6;
+  --success:#059669; --warning:#B45309; --danger:#DC2626;
+  --text:#0F172A; --text-2:#64748B; --text-3:#94A3B8;
+  --radius:12px; --radius-sm:8px;
+  --shadow:0 1px 3px rgba(15,23,42,0.06);
+  --shadow-lg:0 10px 40px rgba(15,23,42,0.12);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased}
+.display{font-family:'Prompt',sans-serif}
+img{max-width:100%;display:block}
+button{font-family:inherit;cursor:pointer;border:none;background:none}
+input,textarea,select{font-family:inherit}
+a{text-decoration:none;color:inherit}
 
+/* ===== Login ===== */
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(135deg,#0F172A 0%,#1E3A5F 100%);position:relative;overflow:hidden}
+.login-wrap::before{content:'';position:absolute;top:-100px;right:-100px;width:340px;height:340px;background:radial-gradient(circle,rgba(59,130,246,0.2),transparent);border-radius:50%}
+.login-wrap::after{content:'';position:absolute;bottom:-120px;left:-80px;width:380px;height:380px;background:radial-gradient(circle,rgba(139,92,246,0.12),transparent);border-radius:50%}
+.login-card{background:var(--card);border-radius:16px;padding:32px;width:100%;max-width:380px;box-shadow:var(--shadow-lg);position:relative;z-index:1}
+.login-logo{width:64px;height:64px;border-radius:50%;background:#fff;border:1px solid var(--border);margin:0 auto 16px;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:5px}
+.login-logo img{width:100%;height:100%;object-fit:contain}
+.login-title{text-align:center;font-size:20px;font-weight:600;margin-bottom:4px}
+.login-sub{text-align:center;font-size:12px;color:var(--text-2);margin-bottom:24px}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:12px;color:var(--text-2);margin-bottom:6px;font-weight:500}
+.field input{width:100%;padding:10px 14px;border:0.5px solid #CBD5E1;border-radius:var(--radius-sm);font-size:14px;transition:.2s}
+.field input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(30,64,175,0.1)}
+.btn-login{width:100%;padding:11px;background:linear-gradient(135deg,#1E40AF,#3B82F6);color:#fff;border-radius:var(--radius-sm);font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;transition:.2s}
+.btn-login:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(30,64,175,0.3)}
+.btn-login:disabled{opacity:.6;cursor:wait}
+.login-err{background:#FEF2F2;color:var(--danger);font-size:12px;padding:10px 12px;border-radius:var(--radius-sm);margin-bottom:16px;display:none}
+.login-err.show{display:block}
+.login-foot{text-align:center;font-size:10px;color:var(--text-3);margin-top:20px}
+
+/* ===== App Layout ===== */
+.app{display:none;min-height:100vh}
+.app.show{display:grid;grid-template-columns:220px 1fr}
+.sidebar{background:var(--card);border-right:0.5px solid var(--border);padding:16px 12px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+.side-brand{display:flex;align-items:center;gap:8px;padding:6px 8px 14px;border-bottom:0.5px solid var(--border);margin-bottom:12px}
+.side-logo{width:36px;height:36px;border-radius:50%;background:#fff;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;overflow:hidden;padding:2px;flex-shrink:0}
+.side-logo img{width:100%;height:100%;object-fit:contain}
+.side-brand-title{font-size:13px;font-weight:600}
+.side-brand-sub{font-size:9px;color:var(--text-3)}
+.side-group-label{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--text-3);margin:14px 8px 4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--radius-sm);color:#475569;font-size:13px;transition:.2s;cursor:pointer;width:100%;text-align:left}
+.nav-item:hover{background:#F8FAFC}
+.nav-item.active{background:#EFF6FF;color:var(--primary);font-weight:600}
+.nav-item .badge{margin-left:auto;background:#EFF6FF;color:var(--primary);font-size:9px;padding:1px 7px;border-radius:8px}
+.nav-item.active .badge{background:var(--primary);color:#fff}
+.side-user{margin-top:auto;padding:10px;background:#F8FAFC;border-radius:var(--radius-sm);border:0.5px solid var(--border)}
+.side-user-row{display:flex;align-items:center;gap:8px}
+.side-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#10B981,#3B82F6);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#fff}
+.side-user-name{font-size:11px;font-weight:600}
+.side-user-status{font-size:9px;color:var(--success)}
+
+.main{padding:18px 22px;overflow-y:auto}
+.page-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px}
+.page-title{font-size:18px;font-weight:600}
+.page-sub{font-size:11px;color:var(--text-2);margin-top:2px}
+.btn{padding:8px 14px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:5px;transition:.2s}
+.btn-primary{background:linear-gradient(135deg,#1E40AF,#3B82F6);color:#fff}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(30,64,175,0.25)}
+.btn-outline{background:var(--card);border:0.5px solid #CBD5E1;color:#475569}
+.btn-outline:hover{border-color:var(--primary);color:var(--primary)}
+.btn-danger{background:#FEF2F2;color:var(--danger)}
+.btn-sm{padding:6px 10px;font-size:12px}
+
+/* page sections */
+.page{display:none}
+.page.show{display:block;animation:fadeIn .3s}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* ===== Stat cards ===== */
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.stat-card{background:var(--card);border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:13px}
+.stat-card-top{display:flex;align-items:center;gap:6px;margin-bottom:5px}
+.stat-ico{width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px}
+.stat-card-label{font-size:10px;color:var(--text-2)}
+.stat-card-val{font-size:22px;font-weight:600}
+.stat-card-sub{font-size:9px;margin-top:2px}
+
+/* ===== Charts ===== */
+.chart-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:10px;margin-bottom:14px}
+.panel{background:var(--card);border:0.5px solid var(--border);border-radius:var(--radius);padding:14px}
+.panel-title{font-size:13px;font-weight:600;margin-bottom:10px}
+.legend{display:flex;flex-direction:column;gap:5px;font-size:11px;margin-top:8px}
+.legend-row{display:flex;justify-content:space-between;color:#475569}
+.bottom-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rank-row{display:flex;align-items:center;gap:8px;padding:7px;background:#F8FAFC;border-radius:6px;margin-bottom:6px}
+.rank-num{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#fff;flex-shrink:0}
+.rank-info{flex:1;min-width:0}
+.rank-title{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rank-meta{font-size:9px;color:var(--text-2)}
+
+/* ===== Featured banner ===== */
+.featured-banner{background:linear-gradient(135deg,#EFF6FF,#F5F3FF);border:0.5px solid #DBEAFE;border-radius:var(--radius);padding:12px;margin-bottom:14px}
+.featured-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.featured-body{display:flex;gap:10px;align-items:center}
+.featured-cover{width:46px;height:46px;border-radius:8px;background:linear-gradient(135deg,#1E40AF,#3B82F6);display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;overflow:hidden}
+.featured-cover img{width:100%;height:100%;object-fit:cover}
+
+/* ===== Table ===== */
+.toolbar2{background:var(--card);border:0.5px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.toolbar2 input,.toolbar2 select{padding:7px 12px;border:0.5px solid #CBD5E1;border-radius:6px;font-size:12px;background:var(--card)}
+.toolbar2 input{flex:1;min-width:180px}
+.table-wrap{background:var(--card);border:0.5px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:12px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead tr{background:#F8FAFC;color:var(--text-2);text-align:left}
+th{padding:10px 12px;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:0.5px}
+td{padding:10px 12px;border-top:0.5px solid var(--border)}
+.t-title{display:flex;align-items:center;gap:8px}
+.t-cover{width:28px;height:28px;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden}
+.t-cover img{width:100%;height:100%;object-fit:cover}
+.t-name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
+.t-sub{font-size:9px;color:var(--text-2)}
+.cat-pill{padding:2px 8px;border-radius:10px;font-size:10px}
+.status-dot{font-size:11px}
+.t-actions i{margin:0 4px;cursor:pointer;font-size:15px}
+.actions-view{color:#94A3B8}.actions-edit{color:var(--primary-light)}.actions-del{color:var(--danger)}.actions-star{color:#F59E0B}
+
+/* pagination (admin) */
+.pagination2{background:#F8FAFC;border-top:0.5px solid var(--border);padding:10px 12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+.pg-info{font-size:11px;color:var(--text-2);display:flex;align-items:center;gap:8px}
+.pg-info select{padding:3px 6px;border:0.5px solid #CBD5E1;border-radius:4px;font-size:11px}
+.pg-btns{display:flex;gap:3px;align-items:center}
+.pg2-btn{min-width:28px;height:28px;padding:0 6px;background:var(--card);border:0.5px solid #CBD5E1;color:#475569;border-radius:4px;font-size:11px;display:flex;align-items:center;justify-content:center}
+.pg2-btn:hover:not(:disabled){border-color:var(--primary);color:var(--primary)}
+.pg2-btn.active{background:var(--primary);color:#fff;border-color:var(--primary);font-weight:600}
+.pg2-btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* ===== Form ===== */
+.form-card{background:var(--card);border:0.5px solid var(--border);border-radius:var(--radius);padding:20px;max-width:760px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.form-field{margin-bottom:14px}
+.form-field label{display:block;font-size:13px;color:var(--text-2);margin-bottom:5px;font-weight:500}
+.form-field .req{color:var(--danger)}
+.form-field input,.form-field textarea,.form-field select{width:100%;padding:9px 12px;border:0.5px solid #CBD5E1;border-radius:var(--radius-sm);font-size:14px;transition:.2s}
+.form-field input:focus,.form-field textarea:focus,.form-field select:focus{outline:none;border-color:var(--primary)}
+.form-field textarea{resize:vertical;min-height:100px}
+.upload-zone{border:1.5px dashed #CBD5E1;border-radius:var(--radius-sm);padding:18px;text-align:center;background:#F8FAFC;cursor:pointer;transition:.2s}
+.upload-zone:hover{border-color:var(--primary);background:#EFF6FF}
+.upload-zone.has-file{border-style:solid;border-color:var(--success);background:#F0FDF4}
+.upload-hint{font-size:12px;color:var(--text-2)}
+.upload-sub{font-size:10px;color:var(--text-3);margin-top:4px}
+.upload-preview{margin-top:8px;display:flex;align-items:center;gap:8px;justify-content:center}
+.upload-preview img{width:40px;height:40px;border-radius:6px;object-fit:cover}
+.form-actions{display:flex;gap:8px;justify-content:flex-end;padding-top:6px}
+
+/* ===== Footer ===== */
+.admin-footer{background:linear-gradient(135deg,#0F172A,#1E3A5F);border-radius:var(--radius);padding:14px 16px;margin-top:16px;position:relative;overflow:hidden}
+.admin-footer::before{content:'';position:absolute;top:-30px;right:-30px;width:120px;height:120px;background:radial-gradient(circle,rgba(59,130,246,0.15),transparent);border-radius:50%}
+.admin-footer-inner{position:relative;z-index:1;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.admin-footer-logo{width:40px;height:40px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:3px;flex-shrink:0}
+.admin-footer-logo img{width:100%;height:100%;object-fit:contain}
+.admin-footer-label{font-size:9px;color:var(--primary-light);text-transform:uppercase;letter-spacing:1px;font-weight:600}
+.admin-footer-name{font-size:13px;font-weight:600;color:#fff}
+.admin-footer-role{font-size:10px;color:var(--text-3);margin-top:2px}
+
+/* ===== Modal (form/confirm) ===== */
+.overlay{position:fixed;inset:0;background:rgba(15,20,25,0.6);display:none;align-items:center;justify-content:center;z-index:100;padding:16px;overflow-y:auto}
+.overlay.show{display:flex}
+.dialog{background:#fff;border-radius:14px;max-width:440px;width:100%;padding:22px;box-shadow:var(--shadow-lg);animation:fadeIn .25s}
+.dialog-title{font-size:16px;font-weight:600;margin-bottom:8px}
+.dialog-text{font-size:13px;color:var(--text-2);margin-bottom:18px;line-height:1.6}
+.dialog-actions{display:flex;gap:8px;justify-content:flex-end}
+
+/* ===== Toast ===== */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(100px);background:var(--text);color:#fff;padding:11px 20px;border-radius:var(--radius-sm);font-size:13px;z-index:200;opacity:0;transition:.3s;display:flex;align-items:center;gap:8px}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+.toast.success{background:var(--success)}.toast.error{background:var(--danger)}
+
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;margin:40px auto;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-row{text-align:center;padding:40px;color:var(--text-2)}
+
+/* ===== Responsive ===== */
+@media(max-width:760px){
+  .app.show{grid-template-columns:1fr}
+  .sidebar{position:fixed;left:-220px;z-index:60;transition:.3s;width:220px}
+  .sidebar.open{left:0}
+  .menu-toggle{display:flex!important}
+  .stat-grid{grid-template-columns:repeat(2,1fr)}
+  .chart-grid,.bottom-grid,.form-row{grid-template-columns:1fr}
+}
+.menu-toggle{display:none;width:38px;height:38px;align-items:center;justify-content:center;background:var(--card);border:0.5px solid var(--border);border-radius:8px;font-size:18px}
+</style>
+</head>
+<body>
+
+<!-- ========== LOGIN ========== -->
+<div class="login-wrap" id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo"><img id="loginLogo" alt="โลโก้"></div>
+    <div class="login-title display">เข้าสู่ระบบผู้ดูแล</div>
+    <div class="login-sub">ระบบจัดการจดหมายข่าวประชาสัมพันธ์</div>
+    <div class="login-err" id="loginErr"></div>
+    <div class="field">
+      <label>ชื่อผู้ใช้</label>
+      <input type="text" id="loginUser" placeholder="username" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>รหัสผ่าน</label>
+      <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn-login" id="btnLogin"><i class="ti ti-login-2"></i> เข้าสู่ระบบ</button>
+    <div class="login-foot"><i class="ti ti-lock"></i> ป้องกันด้วย SHA-256 + salt</div>
+  </div>
+</div>
+
+<!-- ========== APP ========== -->
+<div class="app" id="app">
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="side-brand">
+      <div class="side-logo"><img id="sideLogo" alt="โลโก้"></div>
+      <div>
+        <div class="side-brand-title display">ระบบจดหมายข่าว</div>
+        <div class="side-brand-sub" id="sideSchool">โรงเรียน</div>
+      </div>
+    </div>
+    <div class="side-group-label">เมนูหลัก</div>
+    <button class="nav-item active" data-page="dashboard"><i class="ti ti-layout-dashboard"></i> ภาพรวม</button>
+    <button class="nav-item" data-page="list"><i class="ti ti-news"></i> จดหมายข่าว <span class="badge" id="navCount">0</span></button>
+    <button class="nav-item" data-page="form"><i class="ti ti-plus"></i> เพิ่มฉบับใหม่</button>
+    <div class="side-group-label">ระบบ</div>
+    <button class="nav-item" data-page="settings"><i class="ti ti-settings"></i> ตั้งค่า</button>
+    <button class="nav-item" id="btnLogout"><i class="ti ti-logout"></i> ออกจากระบบ</button>
+    <div class="side-user">
+      <div class="side-user-row">
+        <div class="side-avatar" id="userAvatar">ช</div>
+        <div style="flex:1;min-width:0">
+          <div class="side-user-name" id="userName">ผู้ดูแล</div>
+          <div class="side-user-status">● ออนไลน์</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <!-- Dashboard -->
+    <section class="page show" id="page-dashboard"></section>
+    <!-- List -->
+    <section class="page" id="page-list"></section>
+    <!-- Form -->
+    <section class="page" id="page-form"></section>
+    <!-- Settings -->
+    <section class="page" id="page-settings"></section>
+
+    <!-- Footer -->
+    <div class="admin-footer">
+      <div class="admin-footer-inner">
+        <div class="admin-footer-logo"><img id="footLogo" alt="โลโก้"></div>
+        <div style="flex:1;min-width:180px">
+          <div class="admin-footer-label">ผู้พัฒนาระบบ</div>
+          <div class="admin-footer-name display" id="footDev">ผู้พัฒนา</div>
+          <div class="admin-footer-role" id="footRole"></div>
+        </div>
+        <span style="font-size:9px;color:#64748B" id="footVer"></span>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="overlay" id="overlay"><div class="dialog" id="dialog"></div></div>
+<div class="toast" id="toast"></div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

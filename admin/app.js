@@ -1,0 +1,621 @@
+/**
+ * ============================================================
+ *  app.js - Logic หน้า Admin ระบบจดหมายข่าว
+ *  ผู้พัฒนา: นายชิติพัทธ์ นิลวรรณ
+ * ============================================================
+ */
+
+// ===== State =====
+const A = {
+  token: null,
+  user: null,
+  categories: [],
+  catMap: {},
+  list: [],
+  pagination: null,
+  // filter ของหน้า list
+  page: 1, pageSize: 10, search: '', category: 'all', status: 'all',
+  // ไฟล์ที่เลือกในฟอร์ม (base64)
+  formCover: null, formPdf: null,
+  editingId: null
+};
+
+const LS_TOKEN = 'nl_admin_token';
+const LS_USER = 'nl_admin_user';
+
+// ============================================================
+//  API
+// ============================================================
+async function apiGet(action, params){
+  const url = new URL(CONFIG.API_URL);
+  url.searchParams.set('action', action);
+  Object.keys(params||{}).forEach(k=>url.searchParams.set(k, params[k]));
+  const res = await fetch(url.toString());
+  return res.json();
+}
+async function apiPost(body){
+  // Apps Script ต้องส่งแบบ text/plain เพื่อเลี่ยง preflight CORS
+  const res = await fetch(CONFIG.API_URL, {
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify(body)
+  });
+  return res.json();
+}
+
+// ============================================================
+//  Init
+// ============================================================
+function initConfig(){
+  ['loginLogo','sideLogo','footLogo'].forEach(id=>{
+    const el=document.getElementById(id);
+    el.src=CONFIG.LOGO_URL;
+    el.onerror=function(){this.parentNode.innerHTML='<span style="font-size:'+(id==='loginLogo'?'30':'20')+'px">🏫</span>'};
+  });
+  document.getElementById('sideSchool').textContent=CONFIG.SCHOOL_NAME;
+  document.getElementById('footDev').textContent=CONFIG.DEVELOPER;
+  document.getElementById('footRole').innerHTML=CONFIG.DEVELOPER_ROLE+' · '+CONFIG.SCHOOL_DISTRICT;
+  document.getElementById('footVer').innerHTML='<i class="ti ti-version"></i> '+CONFIG.VERSION;
+}
+
+function boot(){
+  initConfig();
+  // ตรวจ token ที่เก็บไว้
+  const t=localStorage.getItem(LS_TOKEN);
+  const u=localStorage.getItem(LS_USER);
+  if(t&&u){
+    A.token=t; A.user=JSON.parse(u);
+    enterApp();
+  }else{
+    showLogin();
+  }
+  bindLogin();
+}
+
+// ============================================================
+//  Login
+// ============================================================
+function showLogin(){
+  document.getElementById('loginScreen').style.display='flex';
+  document.getElementById('app').classList.remove('show');
+}
+function bindLogin(){
+  document.getElementById('btnLogin').addEventListener('click', doLogin);
+  document.getElementById('loginPass').addEventListener('keydown',e=>{ if(e.key==='Enter') doLogin(); });
+}
+async function doLogin(){
+  const btn=document.getElementById('btnLogin');
+  const err=document.getElementById('loginErr');
+  const username=document.getElementById('loginUser').value.trim();
+  const password=document.getElementById('loginPass').value;
+  if(!username||!password){ showLoginErr('กรุณากรอกชื่อผู้ใช้และรหัสผ่าน'); return; }
+
+  btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i> กำลังตรวจสอบ...';
+  err.classList.remove('show');
+  try{
+    const r=await apiPost({action:'login',username,password});
+    if(r.success){
+      A.token=r.token; A.user=r.user;
+      localStorage.setItem(LS_TOKEN,r.token);
+      localStorage.setItem(LS_USER,JSON.stringify(r.user));
+      enterApp();
+    }else{
+      showLoginErr(r.error||'เข้าสู่ระบบไม่สำเร็จ');
+    }
+  }catch(e){
+    showLoginErr('เชื่อมต่อไม่สำเร็จ ตรวจสอบ API_URL ใน config.js');
+  }
+  btn.disabled=false; btn.innerHTML='<i class="ti ti-login-2"></i> เข้าสู่ระบบ';
+}
+function showLoginErr(msg){
+  const err=document.getElementById('loginErr');
+  err.textContent=msg; err.classList.add('show');
+}
+
+function enterApp(){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('app').classList.add('show');
+  // user info
+  document.getElementById('userName').textContent=A.user.name||A.user.username;
+  document.getElementById('userAvatar').textContent=(A.user.name||A.user.username).charAt(0);
+  bindNav();
+  loadDashboard();
+  loadListData(); // โหลด list ไว้ background เพื่อให้ navCount แสดง
+}
+
+function logout(){
+  localStorage.removeItem(LS_TOKEN);
+  localStorage.removeItem(LS_USER);
+  A.token=null; A.user=null;
+  location.reload();
+}
+
+// ============================================================
+//  Navigation
+// ============================================================
+function bindNav(){
+  document.querySelectorAll('.nav-item[data-page]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const page=btn.dataset.page;
+      switchPage(page);
+      document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('sidebar').classList.remove('open');
+    });
+  });
+  document.getElementById('btnLogout').addEventListener('click',logout);
+}
+
+function switchPage(page){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('show'));
+  document.getElementById('page-'+page).classList.add('show');
+  if(page==='dashboard') loadDashboard();
+  if(page==='list') renderListPage();
+  if(page==='form'){ A.editingId=null; renderFormPage(); }
+  if(page==='settings') renderSettingsPage();
+}
+
+// ============================================================
+//  Dashboard
+// ============================================================
+async function loadDashboard(){
+  const el=document.getElementById('page-dashboard');
+  el.innerHTML='<div class="loading-row"><div class="spinner"></div>กำลังโหลดสถิติ...</div>';
+  try{
+    const r=await apiGet('stats',{token:A.token});
+    if(!r.success){
+      if(r.error&&r.error.indexOf('เข้าสู่ระบบ')!==-1){ logout(); return; }
+      el.innerHTML='<div class="loading-row">โหลดสถิติไม่สำเร็จ: '+(r.error||'')+'</div>';
+      return;
+    }
+    el.innerHTML=renderDashboard(r.data);
+    drawTrendChart(r.data.monthlyTrend);
+  }catch(e){
+    el.innerHTML='<div class="loading-row">เชื่อมต่อไม่สำเร็จ</div>';
+  }
+}
+
+function renderDashboard(d){
+  const featured = d.topItems.find(t=>t.isFeatured); // อาจไม่มี
+  const catColors=['#1E40AF','#059669','#B45309','#EC4899','#7C3AED'];
+  // donut
+  const total=d.byCategory.reduce((s,c)=>s+c.count,0)||1;
+  let offset=0;
+  const donut=d.byCategory.map((c,i)=>{
+    const pct=(c.count/total)*314;
+    const seg=`<circle cx="70" cy="70" r="50" fill="transparent" stroke="${c.color}" stroke-width="18" stroke-dasharray="${pct} 314" stroke-dashoffset="${-offset}" transform="rotate(-90 70 70)"/>`;
+    offset+=pct; return seg;
+  }).join('');
+  const legend=d.byCategory.map(c=>`<div class="legend-row"><span><span style="color:${c.color}">●</span> ${esc(c.name)}</span><span>${c.count}</span></div>`).join('');
+
+  const topRows=d.topItems.map((t,i)=>{
+    const bg=i===0?'linear-gradient(135deg,#F59E0B,#EF4444)':i===1?'linear-gradient(135deg,#3B82F6,#8B5CF6)':'#94A3B8';
+    return `<div class="rank-row"><div class="rank-num" style="background:${bg}">${i+1}</div>
+      <div class="rank-info"><div class="rank-title">${esc(t.title)}</div><div class="rank-meta">${t.viewCount} ยอดดู · ${t.downloadCount} ดาวน์โหลด</div></div></div>`;
+  }).join('') || '<div style="font-size:12px;color:#94A3B8;padding:8px">ยังไม่มีข้อมูล</div>';
+
+  return `
+  <div class="page-head">
+    <div>
+      <div class="page-title display">ภาพรวมระบบ</div>
+      <div class="page-sub"><span style="color:#059669">●</span> ข้อมูลสด · อัพเดตล่าสุดเมื่อสักครู่</div>
+    </div>
+    <button class="menu-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')"><i class="ti ti-menu-2"></i></button>
+  </div>
+
+  <div class="stat-grid">
+    ${statCard('#DBEAFE','#1E40AF','ti-news','ทั้งหมด',d.totalNewsletters+' ฉบับ', d.draftCount+' ฉบับเป็นร่าง','#B45309')}
+    ${statCard('#D1FAE5','#059669','ti-circle-check','เผยแพร่แล้ว',d.publishedCount,'','')}
+    ${statCard('#EDE9FE','#7C3AED','ti-eye','ยอดดูรวม',d.totalViews.toLocaleString(),'','')}
+    ${statCard('#FEF3C7','#B45309','ti-download','ดาวน์โหลด',d.totalDownloads.toLocaleString(),'','')}
+  </div>
+
+  <div class="chart-grid">
+    <div class="panel">
+      <div class="panel-title">แนวโน้มการเข้าชม (6 เดือนล่าสุด)</div>
+      <canvas id="trendChart" height="150"></canvas>
+    </div>
+    <div class="panel">
+      <div class="panel-title">แยกตามหมวดหมู่</div>
+      <svg width="100%" height="130" viewBox="0 0 140 140" style="max-width:140px;margin:0 auto;display:block">
+        <circle cx="70" cy="70" r="50" fill="transparent" stroke="#F1F5F9" stroke-width="18"/>
+        ${donut}
+        <text x="70" y="68" text-anchor="middle" font-size="22" font-weight="600" fill="#0F172A">${d.publishedCount}</text>
+        <text x="70" y="84" text-anchor="middle" font-size="9" fill="#94A3B8">เผยแพร่</text>
+      </svg>
+      <div class="legend">${legend}</div>
+    </div>
+  </div>
+
+  <div class="bottom-grid">
+    <div class="panel">
+      <div class="panel-title"><i class="ti ti-flame" style="color:#F59E0B"></i> ฉบับยอดนิยม</div>
+      ${topRows}
+    </div>
+    <div class="panel">
+      <div class="panel-title"><i class="ti ti-bolt" style="color:#3B82F6"></i> เริ่มต้นใช้งาน</div>
+      <div style="font-size:12px;color:#475569;line-height:1.9">
+        <div style="padding:8px;background:#F8FAFC;border-radius:6px;margin-bottom:6px;cursor:pointer" onclick="goToForm()"><i class="ti ti-plus" style="color:#1E40AF"></i> เพิ่มจดหมายข่าวฉบับใหม่</div>
+        <div style="padding:8px;background:#F8FAFC;border-radius:6px;margin-bottom:6px;cursor:pointer" onclick="document.querySelector('[data-page=list]').click()"><i class="ti ti-news" style="color:#059669"></i> จัดการจดหมายข่าวทั้งหมด</div>
+        <div style="padding:8px;background:#F8FAFC;border-radius:6px;cursor:pointer" onclick="document.querySelector('[data-page=settings]').click()"><i class="ti ti-key" style="color:#B45309"></i> เปลี่ยนรหัสผ่าน</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function statCard(bg,fg,ico,label,val,sub,subColor){
+  return `<div class="stat-card">
+    <div class="stat-card-top"><div class="stat-ico" style="background:${bg};color:${fg}"><i class="ti ${ico}"></i></div><div class="stat-card-label">${label}</div></div>
+    <div class="stat-card-val">${val}</div>
+    ${sub?`<div class="stat-card-sub" style="color:${subColor}">${sub}</div>`:''}
+  </div>`;
+}
+
+// วาดกราฟเส้นด้วย canvas (ไม่ต้องพึ่ง library)
+function drawTrendChart(trend){
+  const cv=document.getElementById('trendChart');
+  if(!cv||!trend) return;
+  const ctx=cv.getContext('2d');
+  const W=cv.width=cv.offsetWidth, H=cv.height=150;
+  ctx.clearRect(0,0,W,H);
+  const pad=24;
+  const maxV=Math.max(1,...trend.map(t=>Math.max(t.views,t.downloads)));
+  // เส้น grid
+  ctx.strokeStyle='#F1F5F9'; ctx.lineWidth=1;
+  for(let i=0;i<=3;i++){ const y=pad+(H-pad*2)*i/3; ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke(); }
+  const px=i=>pad+(W-pad*2)*i/(trend.length-1||1);
+  const py=v=>H-pad-(H-pad*2)*(v/maxV);
+  // views
+  drawLine(ctx,trend.map((t,i)=>[px(i),py(t.views)]),'#3B82F6',true);
+  // downloads
+  drawLine(ctx,trend.map((t,i)=>[px(i),py(t.downloads)]),'#F59E0B',false);
+  // labels
+  ctx.fillStyle='#94A3B8'; ctx.font='9px Sarabun'; ctx.textAlign='center';
+  trend.forEach((t,i)=>ctx.fillText(t.label,px(i),H-6));
+}
+function drawLine(ctx,pts,color,fill){
+  ctx.strokeStyle=color; ctx.lineWidth=2; ctx.beginPath();
+  pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); ctx.stroke();
+  pts.forEach(p=>{ctx.fillStyle=color;ctx.beginPath();ctx.arc(p[0],p[1],3,0,7);ctx.fill();});
+}
+
+function goToForm(){ document.querySelector('[data-page=form]').click(); }
+
+// ============================================================
+//  List page
+// ============================================================
+async function loadListData(){
+  try{
+    const r=await apiGet('list',{token:A.token,page:A.page,pageSize:A.pageSize,search:A.search,category:A.category,status:A.status});
+    if(r.success){
+      A.list=r.data; A.pagination=r.pagination;
+      document.getElementById('navCount').textContent=r.pagination.totalItems;
+    }
+    return r;
+  }catch(e){ return {success:false}; }
+}
+
+async function renderListPage(){
+  const el=document.getElementById('page-list');
+  el.innerHTML=`
+  <div class="page-head">
+    <div><div class="page-title display">จัดการจดหมายข่าว</div><div class="page-sub">เพิ่ม แก้ไข ลบ และตั้งฉบับเด่น</div></div>
+    <button class="btn btn-primary" onclick="goToForm()"><i class="ti ti-plus"></i> เพิ่มฉบับใหม่</button>
+  </div>
+  <div class="toolbar2">
+    <input type="text" id="listSearch" placeholder="ค้นหาด้วยชื่อ หรือ แท็ก..." value="${esc(A.search)}">
+    <select id="listCat"><option value="all">หมวดหมู่: ทั้งหมด</option>${A.categories.map(c=>`<option value="${c.id}" ${A.category===c.id?'selected':''}>${c.name}</option>`).join('')}</select>
+    <select id="listStatus">
+      <option value="all" ${A.status==='all'?'selected':''}>สถานะ: ทั้งหมด</option>
+      <option value="published" ${A.status==='published'?'selected':''}>เผยแพร่</option>
+      <option value="draft" ${A.status==='draft'?'selected':''}>ร่าง</option>
+      <option value="archived" ${A.status==='archived'?'selected':''}>ถังเก็บ</option>
+    </select>
+  </div>
+  <div class="table-wrap" id="listTableWrap"><div class="loading-row"><div class="spinner"></div>กำลังโหลด...</div></div>`;
+
+  // bind filter
+  let t;
+  document.getElementById('listSearch').addEventListener('input',e=>{clearTimeout(t);t=setTimeout(()=>{A.search=e.target.value;A.page=1;refreshList();},400);});
+  document.getElementById('listCat').addEventListener('change',e=>{A.category=e.target.value;A.page=1;refreshList();});
+  document.getElementById('listStatus').addEventListener('change',e=>{A.status=e.target.value;A.page=1;refreshList();});
+
+  refreshList();
+}
+
+async function refreshList(){
+  const wrap=document.getElementById('listTableWrap');
+  if(!wrap) return;
+  const r=await loadListData();
+  if(!r.success){ wrap.innerHTML='<div class="loading-row">โหลดไม่สำเร็จ</div>'; return; }
+  if(r.data.length===0){ wrap.innerHTML='<div class="loading-row"><i class="ti ti-inbox" style="font-size:32px"></i><br>ไม่พบจดหมายข่าว</div>'; return; }
+
+  const rows=r.data.map(renderListRow).join('');
+  wrap.innerHTML=`<table>
+    <thead><tr><th style="width:38%">หัวข้อ</th><th>หมวดหมู่</th><th>สถานะ</th><th style="text-align:right">ยอดดู</th><th style="text-align:right">วันที่</th><th style="text-align:center">จัดการ</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>${renderListPagination(r.pagination)}`;
+}
+
+function renderListRow(it){
+  const cat=A.catMap[it.category]||{name:it.category,color:'#64748B'};
+  const statusMap={published:['#059669','เผยแพร่'],draft:['#B45309','ร่าง'],archived:['#94A3B8','ถังเก็บ']};
+  const st=statusMap[it.status]||['#94A3B8',it.status];
+  const cover=it.coverImageUrl?`<img src="${it.coverImageUrl}" alt="">`:`<i class="ti ti-photo" style="color:${cat.color};font-size:13px"></i>`;
+  const coverBg=it.coverImageUrl?'':`background:${tint(cat.color)}`;
+  const star=it.isFeatured?` · <i class="ti ti-star-filled" style="color:#F59E0B;font-size:9px"></i> เด่น`:'';
+  return `<tr>
+    <td><div class="t-title"><div class="t-cover" style="${coverBg}">${cover}</div>
+      <div style="min-width:0"><div class="t-name">${esc(it.title)}</div><div class="t-sub">${it.hasPdf?'<i class="ti ti-file"></i> PDF':'ไม่มี PDF'}${star}</div></div></div></td>
+    <td><span class="cat-pill" style="background:${tint(cat.color)};color:${cat.color}">${esc(cat.name)}</span></td>
+    <td><span class="status-dot" style="color:${st[0]}">● ${st[1]}</span></td>
+    <td style="text-align:right">${it.status==='draft'?'—':it.viewCount}</td>
+    <td style="text-align:right;color:#94A3B8;font-size:10px">${it.publishedAtThai||'—'}</td>
+    <td style="text-align:center" class="t-actions">
+      <i class="ti ti-star${it.isFeatured?'-filled':''} actions-star" title="ตั้งเด่น" onclick="toggleFeatured('${it.id}',${!it.isFeatured})"></i>
+      <i class="ti ti-edit actions-edit" title="แก้ไข" onclick="editItem('${it.id}')"></i>
+      <i class="ti ti-trash actions-del" title="ลบ" onclick="confirmDelete('${it.id}','${esc(it.title)}')"></i>
+    </td>
+  </tr>`;
+}
+
+function renderListPagination(pg){
+  if(!pg) return '';
+  const start=pg.totalItems?(pg.currentPage-1)*pg.pageSize+1:0;
+  const end=Math.min(pg.currentPage*pg.pageSize,pg.totalItems);
+  const range=pageRange(pg.currentPage,pg.totalPages);
+  let btns=`<button class="pg2-btn" ${!pg.hasPrev?'disabled':''} onclick="goListPage(${pg.currentPage-1})"><i class="ti ti-chevron-left"></i></button>`;
+  range.forEach(p=>{ btns+= p==='...'?'<span style="padding:0 4px;color:#94A3B8">...</span>':`<button class="pg2-btn ${p===pg.currentPage?'active':''}" onclick="goListPage(${p})">${p}</button>`; });
+  btns+=`<button class="pg2-btn" ${!pg.hasNext?'disabled':''} onclick="goListPage(${pg.currentPage+1})"><i class="ti ti-chevron-right"></i></button>`;
+  return `<div class="pagination2">
+    <div class="pg-info">แสดง <b>${start}-${end}</b> จาก <b>${pg.totalItems}</b> รายการ
+      <select onchange="A.pageSize=+this.value;A.page=1;refreshList()">
+        ${[10,25,50,100].map(n=>`<option ${pg.pageSize===n?'selected':''}>${n}</option>`).join('')}
+      </select></div>
+    <div class="pg-btns">${btns}</div>
+  </div>`;
+}
+function goListPage(p){ A.page=p; refreshList(); }
+
+// ============================================================
+//  Featured / Delete actions
+// ============================================================
+async function toggleFeatured(id,makeFeatured){
+  const r=await apiPost({action:'setFeatured',token:A.token,id:makeFeatured?id:null});
+  if(r.success){ toast(makeFeatured?'ตั้งเป็นฉบับเด่นแล้ว':'ยกเลิกฉบับเด่นแล้ว','success'); refreshList(); }
+  else toast(r.error||'ไม่สำเร็จ','error');
+}
+
+function confirmDelete(id,title){
+  showDialog(`
+    <div class="dialog-title"><i class="ti ti-trash" style="color:#DC2626"></i> ยืนยันการลบ</div>
+    <div class="dialog-text">ต้องการลบ "<b>${title}</b>" ใช่หรือไม่?<br><span style="font-size:11px;color:#94A3B8">ระบบจะย้ายไปถังเก็บ (สามารถกู้คืนได้)</span></div>
+    <div class="dialog-actions">
+      <button class="btn btn-outline" onclick="closeDialog()">ยกเลิก</button>
+      <button class="btn btn-danger" onclick="doDelete('${id}')"><i class="ti ti-trash"></i> ลบ</button>
+    </div>`);
+}
+async function doDelete(id){
+  closeDialog();
+  const r=await apiPost({action:'delete',token:A.token,id:id});
+  if(r.success){ toast('ลบเรียบร้อย','success'); refreshList(); loadListData(); }
+  else toast(r.error||'ลบไม่สำเร็จ','error');
+}
+
+// ============================================================
+//  Form (create / edit)
+// ============================================================
+async function editItem(id){
+  A.editingId=id;
+  document.querySelector('[data-page=form]').click();
+  // โหลดข้อมูลเดิม
+  const r=await apiGet('get',{id:id});
+  if(r.success) fillForm(r.data);
+}
+
+function renderFormPage(){
+  A.formCover=null; A.formPdf=null;
+  const isEdit=!!A.editingId;
+  const el=document.getElementById('page-form');
+  el.innerHTML=`
+  <div class="page-head">
+    <div><div class="page-title display">${isEdit?'แก้ไขจดหมายข่าว':'เพิ่มจดหมายข่าวใหม่'}</div>
+      <div class="page-sub">${isEdit?'แก้ไขข้อมูลแล้วกดบันทึก':'กรอกข้อมูลเพื่อสร้างจดหมายข่าว'}</div></div>
+  </div>
+  <div class="form-card">
+    <div class="form-field">
+      <label>หัวข้อ <span class="req">*</span></label>
+      <input type="text" id="fTitle" placeholder="เช่น ประกาศวันหยุดประจำเดือน...">
+    </div>
+    <div class="form-row">
+      <div class="form-field" style="margin-bottom:0">
+        <label>หมวดหมู่</label>
+        <select id="fCategory">${A.categories.map(c=>`<option value="${c.id}">${c.icon} ${c.name}</option>`).join('')}</select>
+      </div>
+      <div class="form-field" style="margin-bottom:0">
+        <label>สถานะ</label>
+        <select id="fStatus"><option value="published">เผยแพร่ทันที</option><option value="draft">บันทึกเป็นร่าง</option></select>
+      </div>
+    </div>
+    <div class="form-field">
+      <label>เนื้อหา <span class="req">*</span></label>
+      <textarea id="fContent" placeholder="เนื้อหาจดหมายข่าว..."></textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-field" style="margin-bottom:0">
+        <label><i class="ti ti-photo"></i> ภาพอินโฟกราฟิก</label>
+        <div class="upload-zone" id="zoneCover" onclick="document.getElementById('inpCover').click()">
+          <div class="upload-hint"><i class="ti ti-cloud-upload"></i> คลิกเพื่อเลือกรูป</div>
+          <div class="upload-sub">JPG, PNG · ระบบบีบขนาดอัตโนมัติ</div>
+          <div id="coverPreview"></div>
+        </div>
+        <input type="file" id="inpCover" accept="image/*" style="display:none">
+      </div>
+      <div class="form-field" style="margin-bottom:0">
+        <label><i class="ti ti-file-text"></i> ไฟล์ PDF แนบ</label>
+        <div class="upload-zone" id="zonePdf" onclick="document.getElementById('inpPdf').click()">
+          <div class="upload-hint"><i class="ti ti-cloud-upload"></i> คลิกเพื่อเลือก PDF</div>
+          <div class="upload-sub">PDF · สูงสุด 8 MB</div>
+          <div id="pdfPreview"></div>
+        </div>
+        <input type="file" id="inpPdf" accept="application/pdf" style="display:none">
+      </div>
+    </div>
+    <div class="form-field">
+      <label>แท็ก (คั่นด้วยเครื่องหมาย ,)</label>
+      <input type="text" id="fTags" placeholder="วันหยุด, ประกาศ, พฤษภาคม">
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-outline" onclick="document.querySelector('[data-page=list]').click()">ยกเลิก</button>
+      <button class="btn btn-primary" id="btnSave"><i class="ti ti-device-floppy"></i> ${isEdit?'บันทึกการแก้ไข':'บันทึกและเผยแพร่'}</button>
+    </div>
+  </div>`;
+
+  // bind upload
+  document.getElementById('inpCover').addEventListener('change',handleCoverSelect);
+  document.getElementById('inpPdf').addEventListener('change',handlePdfSelect);
+  document.getElementById('btnSave').addEventListener('click',saveForm);
+}
+
+function fillForm(d){
+  document.getElementById('fTitle').value=d.title||'';
+  document.getElementById('fCategory').value=d.category||'general';
+  document.getElementById('fStatus').value=d.status==='draft'?'draft':'published';
+  document.getElementById('fContent').value=d.content||'';
+  document.getElementById('fTags').value=d.tags||'';
+  if(d.coverImageUrl){
+    document.getElementById('coverPreview').innerHTML=`<div class="upload-preview"><img src="${d.coverImageUrl}"><span style="font-size:11px;color:#059669">มีรูปเดิม (เลือกใหม่เพื่อเปลี่ยน)</span></div>`;
+  }
+  if(d.hasPdf){
+    document.getElementById('pdfPreview').innerHTML=`<div class="upload-preview"><i class="ti ti-file-type-pdf" style="color:#DC2626;font-size:24px"></i><span style="font-size:11px;color:#059669">${esc(d.pdfFileName||'มีไฟล์เดิม')}</span></div>`;
+  }
+}
+
+// บีบรูปในเบราว์เซอร์ก่อนอัปโหลด
+function handleCoverSelect(e){
+  const file=e.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    const img=new Image();
+    img.onload=()=>{
+      const maxW=1600;
+      let w=img.width,h=img.height;
+      if(w>maxW){ h=h*maxW/w; w=maxW; }
+      const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
+      const dataUrl=cv.toDataURL('image/jpeg',0.72);
+      A.formCover={base64:dataUrl.split(',')[1],mimeType:'image/jpeg',fileName:(file.name.replace(/\.[^.]+$/,''))+'.jpg'};
+      document.getElementById('zoneCover').classList.add('has-file');
+      document.getElementById('coverPreview').innerHTML=`<div class="upload-preview"><img src="${dataUrl}"><span style="font-size:11px;color:#059669"><i class="ti ti-check"></i> พร้อมอัปโหลด</span></div>`;
+    };
+    img.src=ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function handlePdfSelect(e){
+  const file=e.target.files[0]; if(!file) return;
+  if(file.size>8*1024*1024){ toast('ไฟล์ PDF ใหญ่เกิน 8 MB','error'); e.target.value=''; return; }
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    A.formPdf={base64:ev.target.result.split(',')[1],mimeType:'application/pdf',fileName:file.name};
+    document.getElementById('zonePdf').classList.add('has-file');
+    document.getElementById('pdfPreview').innerHTML=`<div class="upload-preview"><i class="ti ti-file-type-pdf" style="color:#DC2626;font-size:24px"></i><span style="font-size:11px;color:#059669"><i class="ti ti-check"></i> ${esc(file.name)} (${(file.size/1048576).toFixed(1)} MB)</span></div>`;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function saveForm(){
+  const title=document.getElementById('fTitle').value.trim();
+  const content=document.getElementById('fContent').value.trim();
+  if(!title||!content){ toast('กรุณากรอกหัวข้อและเนื้อหา','error'); return; }
+
+  const btn=document.getElementById('btnSave');
+  btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i> กำลังบันทึก...';
+
+  const body={
+    action: A.editingId?'update':'create',
+    token: A.token,
+    title, content,
+    category: document.getElementById('fCategory').value,
+    status: document.getElementById('fStatus').value,
+    tags: document.getElementById('fTags').value.trim()
+  };
+  if(A.editingId) body.id=A.editingId;
+  if(A.formCover) body.coverImage=A.formCover;
+  if(A.formPdf) body.pdf=A.formPdf;
+
+  try{
+    const r=await apiPost(body);
+    if(r.success){
+      toast(A.editingId?'แก้ไขเรียบร้อย':'สร้างจดหมายข่าวเรียบร้อย','success');
+      A.editingId=null;
+      document.querySelector('[data-page=list]').click();
+      loadListData();
+    }else{
+      toast(r.error||'บันทึกไม่สำเร็จ','error');
+      btn.disabled=false; btn.innerHTML='<i class="ti ti-device-floppy"></i> บันทึก';
+    }
+  }catch(e){
+    toast('เชื่อมต่อไม่สำเร็จ','error');
+    btn.disabled=false; btn.innerHTML='<i class="ti ti-device-floppy"></i> บันทึก';
+  }
+}
+
+// ============================================================
+//  Settings
+// ============================================================
+function renderSettingsPage(){
+  const el=document.getElementById('page-settings');
+  el.innerHTML=`
+  <div class="page-head"><div><div class="page-title display">ตั้งค่า</div><div class="page-sub">จัดการบัญชีผู้ดูแล</div></div></div>
+  <div class="form-card">
+    <div class="panel-title"><i class="ti ti-key"></i> เปลี่ยนรหัสผ่าน</div>
+    <div class="form-field"><label>รหัสผ่านเดิม</label><input type="password" id="oldPass"></div>
+    <div class="form-field"><label>รหัสผ่านใหม่ (อย่างน้อย 6 ตัว)</label><input type="password" id="newPass"></div>
+    <div class="form-field"><label>ยืนยันรหัสผ่านใหม่</label><input type="password" id="newPass2"></div>
+    <div class="form-actions"><button class="btn btn-primary" id="btnChangePass"><i class="ti ti-check"></i> เปลี่ยนรหัสผ่าน</button></div>
+  </div>`;
+  document.getElementById('btnChangePass').addEventListener('click',changePassword);
+}
+async function changePassword(){
+  const oldP=document.getElementById('oldPass').value;
+  const newP=document.getElementById('newPass').value;
+  const newP2=document.getElementById('newPass2').value;
+  if(!oldP||!newP){ toast('กรุณากรอกข้อมูลให้ครบ','error'); return; }
+  if(newP!==newP2){ toast('รหัสผ่านใหม่ไม่ตรงกัน','error'); return; }
+  if(newP.length<6){ toast('รหัสผ่านใหม่ต้องยาวอย่างน้อย 6 ตัว','error'); return; }
+  const r=await apiPost({action:'changePassword',token:A.token,oldPassword:oldP,newPassword:newP});
+  if(r.success){ toast('เปลี่ยนรหัสผ่านเรียบร้อย','success'); document.getElementById('oldPass').value='';document.getElementById('newPass').value='';document.getElementById('newPass2').value=''; }
+  else toast(r.error||'ไม่สำเร็จ','error');
+}
+
+// ============================================================
+//  Dialog / Toast / Utils
+// ============================================================
+function showDialog(html){ document.getElementById('dialog').innerHTML=html; document.getElementById('overlay').classList.add('show'); }
+function closeDialog(){ document.getElementById('overlay').classList.remove('show'); }
+let toastT;
+function toast(msg,type){
+  const t=document.getElementById('toast');
+  t.className='toast '+(type||'')+' show';
+  t.innerHTML=`<i class="ti ti-${type==='success'?'circle-check':type==='error'?'alert-circle':'info-circle'}"></i> ${msg}`;
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3000);
+}
+function esc(s){ return (s||'').toString().replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function tint(hex){ const m={'#1E40AF':'#EFF6FF','#059669':'#F0FDF4','#B45309':'#FFFBEB','#BE185D':'#FDF2F8','#EC4899':'#FDF2F8','#7C3AED':'#F5F3FF'}; return m[hex]||'#F1F5F9'; }
+function pageRange(cur,total){ const r=[];const d=1; for(let i=1;i<=total;i++){ if(i===1||i===total||(i>=cur-d&&i<=cur+d))r.push(i); else if(r[r.length-1]!=='...')r.push('...'); } return r; }
+
+// โหลดหมวดหมู่ตอนเริ่ม (ใช้ทั้ง list และ form)
+async function loadCategoriesOnce(){
+  const r=await apiGet('categories');
+  if(r.success){ A.categories=r.data; r.data.forEach(c=>A.catMap[c.id]={name:c.name,color:c.color,icon:c.icon}); }
+}
+
+// ===== เริ่มทำงาน =====
+(async function(){
+  await loadCategoriesOnce();
+  boot();
+  // ปิด dialog เมื่อคลิกพื้นหลัง
+  document.getElementById('overlay').addEventListener('click',e=>{if(e.target.id==='overlay')closeDialog();});
+})();
