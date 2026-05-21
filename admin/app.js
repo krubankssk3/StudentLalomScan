@@ -137,6 +137,8 @@ function bindNav(){
   document.querySelectorAll('.nav-item[data-page]').forEach(btn=>{
     btn.addEventListener('click',()=>{
       const page=btn.dataset.page;
+      // กดเมนู "เพิ่มฉบับใหม่" จากแถบข้าง = สร้างใหม่เสมอ จึงล้าง editingId
+      if(page==='form') A.editingId=null;
       switchPage(page);
       document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
       btn.classList.add('active');
@@ -146,12 +148,20 @@ function bindNav(){
   document.getElementById('btnLogout').addEventListener('click',logout);
 }
 
+// activatePageMenu: ไฮไลต์เมนูโดยไม่ผ่าน logic ล้างค่า (ใช้ตอนแก้ไข)
+function activatePageMenu(page){
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  const btn=document.querySelector('.nav-item[data-page='+page+']');
+  if(btn) btn.classList.add('active');
+  document.getElementById('sidebar').classList.remove('open');
+}
+
 function switchPage(page){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('show'));
   document.getElementById('page-'+page).classList.add('show');
   if(page==='dashboard') loadDashboard();
   if(page==='list') renderListPage();
-  if(page==='form'){ A.editingId=null; renderFormPage(); }
+  if(page==='form') renderFormPage(); // ไม่ล้าง editingId ที่นี่แล้ว
   if(page==='settings') renderSettingsPage();
 }
 
@@ -344,6 +354,18 @@ function renderListRow(it){
   const cover=it.coverImageUrl?`<img src="${it.coverImageUrl}" alt="">`:`<i class="ti ti-photo" style="color:${cat.color};font-size:13px"></i>`;
   const coverBg=it.coverImageUrl?'':`background:${tint(cat.color)}`;
   const star=it.isFeatured?` · <i class="ti ti-star-filled" style="color:#F59E0B;font-size:9px"></i> เด่น`:'';
+  // ปุ่มจัดการ: ถ้าอยู่ในถังเก็บ แสดงปุ่มกู้คืน + ลบถาวร; ปกติแสดงปุ่มเด่น/แก้ไข/ลบ
+  let actions;
+  if(it.status==='archived'){
+    actions=`
+      <i class="ti ti-refresh actions-restore" title="กู้คืน" onclick="restoreItem('${it.id}')"></i>
+      <i class="ti ti-trash-x actions-purge" title="ลบถาวร" onclick="confirmPurge('${it.id}','${esc(it.title)}')"></i>`;
+  }else{
+    actions=`
+      <i class="ti ti-star${it.isFeatured?'-filled':''} actions-star" title="ตั้งเด่น" onclick="toggleFeatured('${it.id}',${!it.isFeatured})"></i>
+      <i class="ti ti-edit actions-edit" title="แก้ไข" onclick="editItem('${it.id}')"></i>
+      <i class="ti ti-trash actions-del" title="ย้ายไปถังเก็บ" onclick="confirmDelete('${it.id}','${esc(it.title)}')"></i>`;
+  }
   return `<tr>
     <td><div class="t-title"><div class="t-cover" style="${coverBg}">${cover}</div>
       <div style="min-width:0"><div class="t-name">${esc(it.title)}</div><div class="t-sub">${it.hasPdf?'<i class="ti ti-file"></i> PDF':'ไม่มี PDF'}${star}</div></div></div></td>
@@ -351,11 +373,7 @@ function renderListRow(it){
     <td><span class="status-dot" style="color:${st[0]}">● ${st[1]}</span></td>
     <td style="text-align:right">${it.status==='draft'?'—':it.viewCount}</td>
     <td style="text-align:right;color:#94A3B8;font-size:10px">${it.publishedAtThai||'—'}</td>
-    <td style="text-align:center" class="t-actions">
-      <i class="ti ti-star${it.isFeatured?'-filled':''} actions-star" title="ตั้งเด่น" onclick="toggleFeatured('${it.id}',${!it.isFeatured})"></i>
-      <i class="ti ti-edit actions-edit" title="แก้ไข" onclick="editItem('${it.id}')"></i>
-      <i class="ti ti-trash actions-del" title="ลบ" onclick="confirmDelete('${it.id}','${esc(it.title)}')"></i>
-    </td>
+    <td style="text-align:center" class="t-actions">${actions}</td>
   </tr>`;
 }
 
@@ -398,7 +416,31 @@ function confirmDelete(id,title){
 async function doDelete(id){
   closeDialog();
   const r=await apiPost({action:'delete',token:A.token,id:id});
-  if(r.success){ toast('ลบเรียบร้อย','success'); refreshList(); loadListData(); }
+  if(r.success){ toast('ย้ายไปถังเก็บแล้ว','success'); refreshList(); loadListData(); }
+  else toast(r.error||'ลบไม่สำเร็จ','error');
+}
+
+// กู้คืนจากถังเก็บ (เปลี่ยนสถานะกลับเป็น draft)
+async function restoreItem(id){
+  const r=await apiPost({action:'update',token:A.token,id:id,status:'draft'});
+  if(r.success){ toast('กู้คืนเรียบร้อย (เป็นสถานะร่าง)','success'); refreshList(); loadListData(); }
+  else toast(r.error||'กู้คืนไม่สำเร็จ','error');
+}
+
+// ยืนยันลบถาวร
+function confirmPurge(id,title){
+  showDialog(`
+    <div class="dialog-title"><i class="ti ti-trash-x" style="color:#991B1B"></i> ลบถาวร</div>
+    <div class="dialog-text">ต้องการลบ "<b>${title}</b>" <b style="color:#991B1B">ออกถาวร</b> ใช่หรือไม่?<br><span style="font-size:11px;color:#94A3B8">⚠️ การลบถาวรจะลบทั้งข้อมูลและไฟล์ (รูป + PDF) ออกจาก Drive และ<b>กู้คืนไม่ได้</b></span></div>
+    <div class="dialog-actions">
+      <button class="btn btn-outline" onclick="closeDialog()">ยกเลิก</button>
+      <button class="btn btn-danger" onclick="doPurge('${id}')"><i class="ti ti-trash-x"></i> ลบถาวร</button>
+    </div>`);
+}
+async function doPurge(id){
+  closeDialog();
+  const r=await apiPost({action:'delete',token:A.token,id:id,hard:true});
+  if(r.success){ toast('ลบถาวรเรียบร้อย','success'); refreshList(); loadListData(); }
   else toast(r.error||'ลบไม่สำเร็จ','error');
 }
 
@@ -407,7 +449,8 @@ async function doDelete(id){
 // ============================================================
 async function editItem(id){
   A.editingId=id;
-  document.querySelector('[data-page=form]').click();
+  switchPage('form');          // เรียกตรง ไม่ผ่าน .click() ที่จะล้าง editingId
+  activatePageMenu('form');    // ไฮไลต์เมนูเฉย ๆ
   // โหลดข้อมูลเดิม
   const r=await apiGet('get',{id:id});
   if(r.success) fillForm(r.data);
