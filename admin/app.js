@@ -16,7 +16,7 @@ const A = {
   // filter ของหน้า list
   page: 1, pageSize: 10, search: '', category: 'all', status: 'all',
   // ไฟล์ที่เลือกในฟอร์ม (base64)
-  formCover: null, formPdf: null,
+  formCover: null, formPdf: null, formGallery: [],
   editingId: null
 };
 
@@ -56,6 +56,10 @@ function initConfig(){
   document.getElementById('footDev').textContent=CONFIG.DEVELOPER;
   document.getElementById('footRole').innerHTML=CONFIG.DEVELOPER_ROLE+' · '+CONFIG.SCHOOL_DISTRICT;
   document.getElementById('footVer').innerHTML='<i class="ti ti-version"></i> '+CONFIG.VERSION;
+  // ปุ่มกลับหน้าสาธารณะ (admin อยู่ใน /admin/ จึงกลับด้วย ../)
+  const publicUrl = (CONFIG.PUBLIC_URL) ? CONFIG.PUBLIC_URL : '../';
+  const lb=document.getElementById('loginBackPublic'); if(lb) lb.href=publicUrl;
+  const nb=document.getElementById('navBackPublic'); if(nb) nb.href=publicUrl;
 }
 
 function boot(){
@@ -457,7 +461,7 @@ async function editItem(id){
 }
 
 function renderFormPage(){
-  A.formCover=null; A.formPdf=null;
+  A.formCover=null; A.formPdf=null; A.formGallery=[];
   const isEdit=!!A.editingId;
   const el=document.getElementById('page-form');
   el.innerHTML=`
@@ -505,6 +509,15 @@ function renderFormPage(){
       </div>
     </div>
     <div class="form-field">
+      <label><i class="ti ti-photo-scan"></i> รายละเอียดเพิ่มเติม (รูปภาพ สูงสุด 6 รูป)</label>
+      <div class="upload-zone" id="zoneGallery" onclick="document.getElementById('inpGallery').click()">
+        <div class="upload-hint"><i class="ti ti-photo-plus"></i> คลิกเพื่อเลือกรูปหลายรูป</div>
+        <div class="upload-sub">JPG, PNG · เลือกได้ครั้งละหลายรูป · ระบบบีบขนาดอัตโนมัติ</div>
+      </div>
+      <input type="file" id="inpGallery" accept="image/*" multiple style="display:none">
+      <div id="galleryPreview" class="gallery-preview"></div>
+    </div>
+    <div class="form-field">
       <label>แท็ก (คั่นด้วยเครื่องหมาย ,)</label>
       <input type="text" id="fTags" placeholder="วันหยุด, ประกาศ, พฤษภาคม">
     </div>
@@ -517,6 +530,7 @@ function renderFormPage(){
   // bind upload
   document.getElementById('inpCover').addEventListener('change',handleCoverSelect);
   document.getElementById('inpPdf').addEventListener('change',handlePdfSelect);
+  document.getElementById('inpGallery').addEventListener('change',handleGallerySelect);
   document.getElementById('btnSave').addEventListener('click',saveForm);
 }
 
@@ -531,6 +545,12 @@ function fillForm(d){
   }
   if(d.hasPdf){
     document.getElementById('pdfPreview').innerHTML=`<div class="upload-preview"><i class="ti ti-file-type-pdf" style="color:#DC2626;font-size:24px"></i><span style="font-size:11px;color:#059669">${esc(d.pdfFileName||'มีไฟล์เดิม')}</span></div>`;
+  }
+  // แสดงรูปแกลเลอรีเดิม (ถ้ามี) - เป็นเพียงตัวอย่าง ถ้าอัปใหม่จะแทนที่ทั้งชุด
+  if(d.gallery && d.gallery.length){
+    const el=document.getElementById('galleryPreview');
+    el.innerHTML=`<div style="font-size:11px;color:#64748B;width:100%;margin-bottom:6px"><i class="ti ti-info-circle"></i> มีรูปเดิม ${d.gallery.length} รูป — เลือกรูปใหม่เพื่อแทนที่ทั้งชุด</div>`+
+      d.gallery.map(g=>`<div class="gp-item"><img src="${g.thumb}" alt=""></div>`).join('');
   }
 }
 
@@ -568,6 +588,56 @@ function handlePdfSelect(e){
   reader.readAsDataURL(file);
 }
 
+// บีบรูป 1 ไฟล์ คืน Promise ของ {base64,mimeType,fileName,dataUrl}
+function compressImage_(file){
+  return new Promise((resolve)=>{
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      const img=new Image();
+      img.onload=()=>{
+        const maxW=1600; let w=img.width,h=img.height;
+        if(w>maxW){ h=h*maxW/w; w=maxW; }
+        const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+        cv.getContext('2d').drawImage(img,0,0,w,h);
+        const dataUrl=cv.toDataURL('image/jpeg',0.72);
+        resolve({base64:dataUrl.split(',')[1],mimeType:'image/jpeg',fileName:(file.name.replace(/\.[^.]+$/,''))+'.jpg',dataUrl:dataUrl});
+      };
+      img.src=ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// เลือกรูปแกลเลอรีหลายรูป (สูงสุด 6)
+async function handleGallerySelect(e){
+  const files=Array.from(e.target.files); if(!files.length) return;
+  const remain=6-A.formGallery.length;
+  if(remain<=0){ toast('เพิ่มรูปได้สูงสุด 6 รูป','error'); return; }
+  const toAdd=files.slice(0,remain);
+  if(files.length>remain) toast('เพิ่มได้อีก '+remain+' รูป (จำกัด 6 รูป)','error');
+  for(const f of toAdd){
+    const img=await compressImage_(f);
+    A.formGallery.push(img);
+  }
+  renderGalleryPreview();
+  e.target.value=''; // เคลียร์เพื่อให้เลือกซ้ำได้
+}
+
+function renderGalleryPreview(){
+  const el=document.getElementById('galleryPreview');
+  if(!el) return;
+  if(!A.formGallery.length){ el.innerHTML=''; document.getElementById('zoneGallery').classList.remove('has-file'); return; }
+  document.getElementById('zoneGallery').classList.add('has-file');
+  el.innerHTML=A.formGallery.map((g,i)=>
+    `<div class="gp-item"><img src="${g.dataUrl||g.thumb}" alt=""><button class="gp-remove" onclick="removeGalleryImg(${i})" title="ลบรูปนี้"><i class="ti ti-x"></i></button></div>`
+  ).join('') + `<div class="gp-count">${A.formGallery.length}/6 รูป</div>`;
+}
+
+function removeGalleryImg(i){
+  A.formGallery.splice(i,1);
+  renderGalleryPreview();
+}
+
 async function saveForm(){
   const title=document.getElementById('fTitle').value.trim();
   const content=document.getElementById('fContent').value.trim();
@@ -587,6 +657,10 @@ async function saveForm(){
   if(A.editingId) body.id=A.editingId;
   if(A.formCover) body.coverImage=A.formCover;
   if(A.formPdf) body.pdf=A.formPdf;
+  // ส่งแกลเลอรี: ถ้ามีรูปใหม่ส่ง array (แทนที่ทั้งชุด)
+  if(A.formGallery && A.formGallery.length){
+    body.gallery=A.formGallery.map(g=>({base64:g.base64,mimeType:g.mimeType,fileName:g.fileName}));
+  }
 
   try{
     const r=await apiPost(body);
