@@ -7,7 +7,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=Prompt:wght@500;600;700&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.7.0/dist/tabler-icons.min.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <style>
 :root{
   --bg:#F1F5F9; --card:#FFFFFF; --border:#E2E8F0;
@@ -153,6 +152,15 @@ a{text-decoration:none;color:inherit}
 .qr-card .qr-box{margin-bottom:8px}
 .qr-card .qr-title{font-size:11px;font-weight:600;margin-bottom:2px}
 .qr-card .qr-desc{font-size:9px;color:var(--text-2);line-height:1.4}
+/* แกลเลอรีรูปหลายรูป */
+.gallery-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.gallery-item{position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;cursor:zoom-in;border:0.5px solid var(--border)}
+.gallery-item img{width:100%;height:100%;object-fit:cover;transition:.2s}
+.gallery-item:hover img{transform:scale(1.06)}
+.gallery-zoom{position:absolute;inset:0;background:rgba(15,23,42,0.35);display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;opacity:0;transition:.2s}
+.gallery-item:hover .gallery-zoom{opacity:1}
+@media(max-width:680px){.gallery-grid{grid-template-columns:repeat(2,1fr)}}
+
 /* lightbox ดูรูปเต็ม */
 .lightbox{position:fixed;inset:0;background:rgba(0,0,0,0.9);display:none;align-items:center;justify-content:center;z-index:200;padding:20px;cursor:zoom-out}
 .lightbox.show{display:flex}
@@ -518,23 +526,7 @@ async function openModal(id){
     const r=await apiGet('get',{id:id,userAgent:navigator.userAgent.substr(0,100)});
     if(!r.success){ box.innerHTML=`<div class="empty">${r.error}</div>`; return; }
     box.innerHTML = renderModal(r.data);
-    // สร้าง QR Code 2 แบบ
-    const item = r.data;
-    const webUrl = window.location.origin + window.location.pathname + '?id=' + id;
-    makeQR('qrWeb', webUrl);
-    // QR ไฟล์ Drive (PDF ก่อน ถ้าไม่มีใช้รูป)
-    const fileUrl = item.hasPdf ? item.pdfDriveUrl : (item.hasCover ? item.coverDriveUrl : '');
-    if(fileUrl) makeQR('qrFile', fileUrl);
   }catch(e){ box.innerHTML=`<div class="empty">โหลดไม่สำเร็จ</div>`; }
-}
-
-// สร้าง QR Code ลงใน element ตาม id
-function makeQR(elId, text){
-  const el = document.getElementById(elId);
-  if(el && window.QRCode){
-    el.innerHTML='';
-    new QRCode(el,{text:text,width:80,height:80,colorDark:'#0F172A',colorLight:'#fff'});
-  }
 }
 
 function renderModal(item){
@@ -571,19 +563,16 @@ function renderModal(item){
   const tags=(item.tags||'').split(',').map(t=>t.trim()).filter(t=>t);
   const tagsHtml=tags.length?`<div class="modal-tags">${tags.map(t=>`<span class="tag"># ${esc(t)}</span>`).join('')}</div>`:'';
 
-  // ===== QR Code 2 แบบ =====
-  // เก็บข้อมูลไฟล์ไว้ใน State เพื่อให้ openModal สร้าง QR ได้
-  State.modalItem = item;
-  let qrFileLabel='', qrFileDesc='';
-  if(item.hasPdf){ qrFileLabel='QR ไฟล์ PDF'; qrFileDesc='สแกนเพื่อเปิด/ดาวน์โหลดไฟล์ PDF โดยตรง'; }
-  else if(item.hasCover){ qrFileLabel='QR ไฟล์รูป'; qrFileDesc='สแกนเพื่อเปิดรูปอินโฟกราฟิกโดยตรง'; }
-
-  const qrFileHtml = (item.hasPdf||item.hasCover) ? `
-    <div class="qr-card">
-      <div class="qr-box" id="qrFile"></div>
-      <div class="qr-title"><i class="ti ti-file-download" style="color:#059669"></i> ${qrFileLabel}</div>
-      <div class="qr-desc">${qrFileDesc}</div>
-    </div>` : '';
+  // ===== แกลเลอรีรูปหลายรูป (รายละเอียดเพิ่มเติม) =====
+  let galleryHtml='';
+  if(item.gallery && item.gallery.length){
+    const thumbs=item.gallery.map((g,i)=>
+      `<div class="gallery-item" onclick="openLightbox('${g.full}')"><img src="${g.thumb}" alt="รูปที่ ${i+1}" loading="lazy"><div class="gallery-zoom"><i class="ti ti-zoom-in"></i></div></div>`
+    ).join('');
+    galleryHtml=`
+    <div class="modal-section-label"><i class="ti ti-photo-scan" style="color:var(--primary)"></i> รายละเอียดเพิ่มเติม (${item.gallery.length} รูป)</div>
+    <div class="gallery-grid">${thumbs}</div>`;
+  }
 
   return `
   <div class="modal-close">
@@ -605,16 +594,8 @@ function renderModal(item){
   <div class="modal-body">
     <div class="modal-content-text">${esc(item.content)}</div>
     ${filesHtml}
+    ${galleryHtml}
     ${tagsHtml}
-    <div class="modal-section-label" style="margin-top:6px"><i class="ti ti-qrcode" style="color:var(--primary)"></i> QR Code</div>
-    <div class="qr-grid">
-      <div class="qr-card">
-        <div class="qr-box" id="qrWeb"></div>
-        <div class="qr-title"><i class="ti ti-world" style="color:var(--primary)"></i> QR หน้าเว็บ</div>
-        <div class="qr-desc">สแกนเปิดอ่านฉบับนี้บนเว็บ พร้อมเนื้อหาครบ</div>
-      </div>
-      ${qrFileHtml}
-    </div>
     <div class="modal-nav">
       <button ${idx<=0?'disabled':''} onclick="navModal(${idx-1})"><i class="ti ti-chevron-left"></i> ฉบับก่อนหน้า</button>
       <button ${idx>=State.currentList.length-1?'disabled':''} onclick="navModal(${idx+1})">ฉบับถัดไป <i class="ti ti-chevron-right"></i></button>
