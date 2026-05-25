@@ -16,7 +16,7 @@ const A = {
   // filter ของหน้า list
   page: 1, pageSize: 10, search: '', category: 'all', status: 'all',
   // ไฟล์ที่เลือกในฟอร์ม (base64)
-  formCover: null, formPdf: null, formGallery: [],
+  formCover: null, formPdf: null, formGallery: [], formCoverPos: '50% 50%',
   editingId: null
 };
 
@@ -461,7 +461,7 @@ async function editItem(id){
 }
 
 function renderFormPage(){
-  A.formCover=null; A.formPdf=null; A.formGallery=[];
+  A.formCover=null; A.formPdf=null; A.formGallery=[]; A.formCoverPos='50% 50%';
   const isEdit=!!A.editingId;
   const el=document.getElementById('page-form');
   el.innerHTML=`
@@ -541,7 +541,8 @@ function fillForm(d){
   document.getElementById('fContent').value=d.content||'';
   document.getElementById('fTags').value=d.tags||'';
   if(d.coverImageUrl){
-    document.getElementById('coverPreview').innerHTML=`<div class="upload-preview"><img src="${d.coverImageUrl}"><span style="font-size:11px;color:#059669">มีรูปเดิม (เลือกใหม่เพื่อเปลี่ยน)</span></div>`;
+    A.formCoverPos = d.coverPos || '50% 50%';
+    renderCoverAdjuster(d.coverImageUrl);
   }
   if(d.hasPdf){
     document.getElementById('pdfPreview').innerHTML=`<div class="upload-preview"><i class="ti ti-file-type-pdf" style="color:#DC2626;font-size:24px"></i><span style="font-size:11px;color:#059669">${esc(d.pdfFileName||'มีไฟล์เดิม')}</span></div>`;
@@ -567,13 +568,65 @@ function handleCoverSelect(e){
       const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
       cv.getContext('2d').drawImage(img,0,0,w,h);
       const dataUrl=cv.toDataURL('image/jpeg',0.72);
-      A.formCover={base64:dataUrl.split(',')[1],mimeType:'image/jpeg',fileName:(file.name.replace(/\.[^.]+$/,''))+'.jpg'};
+      A.formCover={base64:dataUrl.split(',')[1],mimeType:'image/jpeg',fileName:(file.name.replace(/\.[^.]+$/,''))+'.jpg',dataUrl:dataUrl};
+      A.formCoverPos='50% 50%'; // รีเซ็ตตำแหน่งเมื่อเลือกรูปใหม่
       document.getElementById('zoneCover').classList.add('has-file');
-      document.getElementById('coverPreview').innerHTML=`<div class="upload-preview"><img src="${dataUrl}"><span style="font-size:11px;color:#059669"><i class="ti ti-check"></i> พร้อมอัปโหลด</span></div>`;
+      renderCoverAdjuster(dataUrl);
     };
     img.src=ev.target.result;
   };
   reader.readAsDataURL(file);
+}
+
+// แสดงตัวปรับตำแหน่งรูปปก - ลากจุดโฟกัสได้อิสระ
+function renderCoverAdjuster(imgUrl){
+  const el=document.getElementById('coverPreview');
+  if(!el) return;
+  el.innerHTML=`
+    <div class="cover-adjust-wrap">
+      <div class="cover-adjust-label"><i class="ti ti-drag-drop"></i> ลากจุดสีขาวเพื่อเลือกตำแหน่งรูปที่จะแสดง</div>
+      <div class="cover-adjust-frame" id="coverFrame">
+        <img src="${imgUrl}" alt="" id="coverAdjImg" style="object-position:${A.formCoverPos}">
+        <div class="cover-focus-dot" id="coverDot"></div>
+      </div>
+      <div class="cover-adjust-hint">ตัวอย่างนี้คือกรอบที่จะแสดงบนหน้าเว็บ (16:6) · <span id="coverPosText">${A.formCoverPos}</span></div>
+    </div>`;
+  bindCoverDrag();
+}
+
+// ระบบลากจุดโฟกัส
+function bindCoverDrag(){
+  const frame=document.getElementById('coverFrame');
+  const dot=document.getElementById('coverDot');
+  const img=document.getElementById('coverAdjImg');
+  const posText=document.getElementById('coverPosText');
+  if(!frame||!dot) return;
+
+  // ตั้งตำแหน่งจุดเริ่มต้นจาก formCoverPos
+  const parts=A.formCoverPos.split(' ');
+  let px=parseFloat(parts[0])||50, py=parseFloat(parts[1])||50;
+  function placeDot(){ dot.style.left=px+'%'; dot.style.top=py+'%'; }
+  placeDot();
+
+  let dragging=false;
+  function update(clientX,clientY){
+    const rect=frame.getBoundingClientRect();
+    px=Math.max(0,Math.min(100,((clientX-rect.left)/rect.width)*100));
+    py=Math.max(0,Math.min(100,((clientY-rect.top)/rect.height)*100));
+    A.formCoverPos=Math.round(px)+'% '+Math.round(py)+'%';
+    img.style.objectPosition=A.formCoverPos;
+    placeDot();
+    if(posText) posText.textContent=A.formCoverPos;
+  }
+  const start=e=>{dragging=true; const t=e.touches?e.touches[0]:e; update(t.clientX,t.clientY); e.preventDefault();};
+  const move=e=>{if(!dragging)return; const t=e.touches?e.touches[0]:e; update(t.clientX,t.clientY);};
+  const end=()=>{dragging=false;};
+  frame.addEventListener('mousedown',start);
+  frame.addEventListener('touchstart',start,{passive:false});
+  window.addEventListener('mousemove',move);
+  window.addEventListener('touchmove',move,{passive:false});
+  window.addEventListener('mouseup',end);
+  window.addEventListener('touchend',end);
 }
 
 function handlePdfSelect(e){
@@ -656,6 +709,7 @@ async function saveForm(){
   };
   if(A.editingId) body.id=A.editingId;
   if(A.formCover) body.coverImage=A.formCover;
+  body.coverPos=A.formCoverPos;
   if(A.formPdf) body.pdf=A.formPdf;
   // ส่งแกลเลอรี: ถ้ามีรูปใหม่ส่ง array (แทนที่ทั้งชุด)
   if(A.formGallery && A.formGallery.length){
