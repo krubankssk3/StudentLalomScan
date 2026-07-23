@@ -96,6 +96,7 @@ async function doLogin(){
 
   btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i> กำลังตรวจสอบ...';
   err.classList.remove('show');
+  NL.loading('กำลังเข้าสู่ระบบ','กำลังตรวจสอบข้อมูลผู้ใช้');
   try{
     const r=await apiPost({action:'login',username,password});
     if(r.success){
@@ -109,6 +110,7 @@ async function doLogin(){
   }catch(e){
     showLoginErr('เชื่อมต่อไม่สำเร็จ ตรวจสอบ API_URL ใน config.js');
   }
+  NL.close();
   btn.disabled=false; btn.innerHTML='<i class="ti ti-login-2"></i> เข้าสู่ระบบ';
 }
 function showLoginErr(msg){
@@ -173,18 +175,22 @@ function switchPage(page){
 //  Dashboard
 // ============================================================
 async function loadDashboard(){
+  NL.loading('กำลังโหลดสถิติ');
   const el=document.getElementById('page-dashboard');
   el.innerHTML='<div class="loading-row"><div class="spinner"></div>กำลังโหลดสถิติ...</div>';
   try{
     const r=await apiGet('stats',{token:A.token});
     if(!r.success){
+      NL.close();
       if(r.error&&r.error.indexOf('เข้าสู่ระบบ')!==-1){ logout(); return; }
       el.innerHTML='<div class="loading-row">โหลดสถิติไม่สำเร็จ: '+(r.error||'')+'</div>';
       return;
     }
     el.innerHTML=renderDashboard(r.data);
     drawTrendChart(r.data.monthlyTrend);
+    NL.close();
   }catch(e){
+    NL.close();
     el.innerHTML='<div class="loading-row">เชื่อมต่อไม่สำเร็จ</div>';
   }
 }
@@ -419,14 +425,18 @@ function confirmDelete(id,title){
 }
 async function doDelete(id){
   closeDialog();
+  NL.loading('กำลังลบข้อมูล');
   const r=await apiPost({action:'delete',token:A.token,id:id});
+  NL.close();
   if(r.success){ toast('ย้ายไปถังเก็บแล้ว','success'); refreshList(); loadListData(); }
   else toast(r.error||'ลบไม่สำเร็จ','error');
 }
 
 // กู้คืนจากถังเก็บ (เปลี่ยนสถานะกลับเป็น draft)
 async function restoreItem(id){
+  NL.loading('กำลังกู้คืนข้อมูล');
   const r=await apiPost({action:'update',token:A.token,id:id,status:'draft'});
+  NL.close();
   if(r.success){ toast('กู้คืนเรียบร้อย (เป็นสถานะร่าง)','success'); refreshList(); loadListData(); }
   else toast(r.error||'กู้คืนไม่สำเร็จ','error');
 }
@@ -443,7 +453,9 @@ function confirmPurge(id,title){
 }
 async function doPurge(id){
   closeDialog();
+  NL.loading('กำลังลบถาวร','กำลังลบไฟล์ออกจาก Google Drive');
   const r=await apiPost({action:'delete',token:A.token,id:id,hard:true});
+  NL.close();
   if(r.success){ toast('ลบถาวรเรียบร้อย','success'); refreshList(); loadListData(); }
   else toast(r.error||'ลบไม่สำเร็จ','error');
 }
@@ -698,6 +710,7 @@ async function saveForm(){
 
   const btn=document.getElementById('btnSave');
   btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i> กำลังบันทึก...';
+  NL.loading('กำลังอัปโหลดจดหมายข่าว','กำลังส่งข้อมูลและไฟล์แนบ กรุณารอสักครู่');
 
   const body={
     action: A.editingId?'update':'create',
@@ -718,6 +731,7 @@ async function saveForm(){
 
   try{
     const r=await apiPost(body);
+    NL.close();
     if(r.success){
       toast(A.editingId?'แก้ไขเรียบร้อย':'สร้างจดหมายข่าวเรียบร้อย','success');
       A.editingId=null;
@@ -728,6 +742,7 @@ async function saveForm(){
       btn.disabled=false; btn.innerHTML='<i class="ti ti-device-floppy"></i> บันทึก';
     }
   }catch(e){
+    NL.close();
     toast('เชื่อมต่อไม่สำเร็จ','error');
     btn.disabled=false; btn.innerHTML='<i class="ti ti-device-floppy"></i> บันทึก';
   }
@@ -766,12 +781,51 @@ async function changePassword(){
 // ============================================================
 function showDialog(html){ document.getElementById('dialog').innerHTML=html; document.getElementById('overlay').classList.add('show'); }
 function closeDialog(){ document.getElementById('overlay').classList.remove('show'); }
-let toastT;
+// ===== ระบบแจ้งเตือน / โหลด (SweetAlert2 + วงแหวนฟ้า-แดง) =====
+function ringHtml(){
+  return `
+  <div class="nl-ring">
+    <svg viewBox="0 0 120 120">
+      <defs>
+        <linearGradient id="nlgrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#1E40AF"/>
+          <stop offset="45%" stop-color="#3B82F6"/>
+          <stop offset="75%" stop-color="#EF4444"/>
+          <stop offset="100%" stop-color="#DC2626"/>
+        </linearGradient>
+      </defs>
+      <circle cx="60" cy="60" r="52" fill="none" stroke="#EEF2F7" stroke-width="9"/>
+      <circle cx="60" cy="60" r="52" fill="none" stroke="url(#nlgrad)" stroke-width="9"
+        stroke-linecap="round" stroke-dasharray="215 327"/>
+    </svg>
+    <div class="nl-ring-logo">
+      <img src="${CONFIG.LOGO_URL}" alt="โลโก้" onerror="this.parentNode.innerHTML='<span class=&quot;fallback&quot;>🏫</span>'">
+    </div>
+  </div>`;
+}
+
+const NL = {
+  loading(title, text){
+    if(!window.Swal) return;
+    Swal.fire({
+      title: title || 'กำลังโหลดข้อมูล',
+      html: text?`<div>${text}</div>`:'',
+      customClass:{popup:'nl-swal'},
+      allowOutsideClick:false, allowEscapeKey:false, showConfirmButton:false,
+      didOpen: ()=>{ const c=Swal.getHtmlContainer(); if(c) c.insertAdjacentHTML('afterbegin', ringHtml()); }
+    });
+  },
+  close(){ if(window.Swal) Swal.close(); }
+};
+
+// toast แบบเดิม แต่ใช้ SweetAlert2
 function toast(msg,type){
-  const t=document.getElementById('toast');
-  t.className='toast '+(type||'')+' show';
-  t.innerHTML=`<i class="ti ti-${type==='success'?'circle-check':type==='error'?'alert-circle':'info-circle'}"></i> ${msg}`;
-  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3000);
+  if(!window.Swal){ alert(msg); return; }
+  if(type==='error'){
+    Swal.fire({icon:'error',title:'ไม่สำเร็จ',text:msg,confirmButtonColor:'#1E40AF',customClass:{popup:'nl-swal'}});
+  }else{
+    Swal.fire({toast:true,position:'bottom',timer:2600,showConfirmButton:false,icon:type||'success',title:msg,customClass:{popup:'nl-swal'}});
+  }
 }
 function esc(s){ return (s||'').toString().replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function tint(hex){ const m={'#1E40AF':'#EFF6FF','#059669':'#F0FDF4','#B45309':'#FFFBEB','#BE185D':'#FDF2F8','#EC4899':'#FDF2F8','#7C3AED':'#F5F3FF'}; return m[hex]||'#F1F5F9'; }
