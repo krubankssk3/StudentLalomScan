@@ -38,10 +38,17 @@ body{opacity:0;animation:pageIn .55s ease forwards}
 .swal2-popup.nl-swal{border-radius:16px;font-family:'Sarabun',sans-serif}
 .swal2-popup.nl-swal .swal2-title{font-family:'Prompt',sans-serif;font-size:17px;color:#0F172A}
 .swal2-popup.nl-swal .swal2-html-container{font-size:13px;color:#64748B}
-.nl-ring{position:relative;width:118px;height:118px;margin:6px auto 14px}
-.nl-ring svg{width:100%;height:100%;animation:nlspin 1.25s linear infinite;display:block}
+
+.nl-ring svg{width:100%;height:100%;animation:nlspin 1.05s linear infinite;display:block}
+/* Loader แบบไม่มีกล่องขาว - พื้นหลังเบลอ */
+.swal2-popup.nl-plain{background:transparent!important;box-shadow:none!important;padding:0!important;width:auto!important}
+.swal2-container.nl-blur{backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);background:rgba(15,23,42,.34)!important}
+.swal2-popup.nl-plain .swal2-html-container{margin:0!important;padding:0!important;overflow:visible!important}
+.nl-ring{position:relative;width:132px;height:132px;margin:0 auto}
+.nl-ring-logo{position:absolute;inset:22px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:7px;box-shadow:0 6px 22px rgba(0,0,0,.28)}
+
 @keyframes nlspin{to{transform:rotate(360deg)}}
-.nl-ring-logo{position:absolute;inset:20px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:7px;box-shadow:0 2px 12px rgba(15,23,42,.16)}
+
 .nl-ring-logo img{width:100%;height:100%;object-fit:contain}
 .nl-ring-logo .fallback{font-size:26px}
 
