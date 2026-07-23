@@ -22,6 +22,9 @@ const A = {
 
 const LS_TOKEN = 'nl_admin_token';
 const LS_USER = 'nl_admin_user';
+// ใช้ sessionStorage: ข้อมูลจะหายทันทีเมื่อปิดแท็บ/เบราว์เซอร์
+// (ป้องกันการเข้าหน้าแอดมินได้เองโดยไม่ต้องใส่รหัส)
+const SS = window.sessionStorage;
 
 // ============================================================
 //  API
@@ -65,8 +68,10 @@ function initConfig(){
 function boot(){
   initConfig();
   // ตรวจ token ที่เก็บไว้
-  const t=localStorage.getItem(LS_TOKEN);
-  const u=localStorage.getItem(LS_USER);
+  // ล้าง token เก่าที่เคยเก็บค้างไว้ใน localStorage (จากเวอร์ชันก่อน)
+  try{ localStorage.removeItem(LS_TOKEN); localStorage.removeItem(LS_USER); }catch(e){}
+  const t=SS.getItem(LS_TOKEN);
+  const u=SS.getItem(LS_USER);
   if(t&&u){
     A.token=t; A.user=JSON.parse(u);
     enterApp();
@@ -101,8 +106,8 @@ async function doLogin(){
     const r=await apiPost({action:'login',username,password});
     if(r.success){
       A.token=r.token; A.user=r.user;
-      localStorage.setItem(LS_TOKEN,r.token);
-      localStorage.setItem(LS_USER,JSON.stringify(r.user));
+      SS.setItem(LS_TOKEN,r.token);
+      SS.setItem(LS_USER,JSON.stringify(r.user));
       enterApp();
     }else{
       showLoginErr(r.error||'เข้าสู่ระบบไม่สำเร็จ');
@@ -125,13 +130,14 @@ function enterApp(){
   document.getElementById('userName').textContent=A.user.name||A.user.username;
   document.getElementById('userAvatar').textContent=(A.user.name||A.user.username).charAt(0);
   bindNav();
-  loadDashboard();
-  loadListData(); // โหลด list ไว้ background เพื่อให้ navCount แสดง
+  // โหลดพร้อมกัน ไม่ต้องรอทีละอย่าง
+  Promise.all([ loadDashboard(), loadListData() ]);
 }
 
 function logout(){
-  localStorage.removeItem(LS_TOKEN);
-  localStorage.removeItem(LS_USER);
+  SS.removeItem(LS_TOKEN);
+  SS.removeItem(LS_USER);
+  try{ localStorage.removeItem(LS_TOKEN); localStorage.removeItem(LS_USER); }catch(e){}
   A.token=null; A.user=null;
   location.reload();
 }
@@ -179,7 +185,6 @@ function switchPage(page){
 async function loadDashboard(){
   NL.loading('กำลังโหลดสถิติ');
   const el=document.getElementById('page-dashboard');
-  el.innerHTML='<div class="loading-row"><div class="spinner"></div>กำลังโหลดสถิติ...</div>';
   try{
     const r=await apiGet('stats',{token:A.token});
     if(!r.success){
@@ -832,14 +837,18 @@ function ringHtml(){
 }
 
 const NL = {
-  loading(title, text){
+  loading(){
+    // แสดงเฉพาะวงแหวน + โลโก้ บนพื้นหลังเบลอ (ไม่มีกล่องขาว ไม่มีข้อความ)
     if(!window.Swal) return;
+    if(Swal.isVisible()) return;              // กันเปิดซ้อนกัน
     Swal.fire({
-      title: title || 'กำลังโหลดข้อมูล',
-      html: text?`<div>${text}</div>`:'',
-      customClass:{popup:'nl-swal'},
+      html: ringHtml(),
+      customClass:{popup:'nl-plain', container:'nl-blur'},
+      background:'transparent',
+      backdrop:false,
       allowOutsideClick:false, allowEscapeKey:false, showConfirmButton:false,
-      didOpen: ()=>{ const c=Swal.getHtmlContainer(); if(c) c.insertAdjacentHTML('afterbegin', ringHtml()); }
+      showClass:{popup:'', backdrop:''},       // เปิดทันที ไม่มี animation หน่วง
+      hideClass:{popup:'', backdrop:''}
     });
   },
   close(){ if(window.Swal) Swal.close(); }
