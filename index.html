@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=Prompt:wght@500;600;700&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.7.0/dist/tabler-icons.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <style>
 :root{
   --bg:#F1F5F9; --card:#FFFFFF; --border:#E2E8F0;
@@ -24,6 +25,24 @@ body{
 }
 .display{font-family:'Prompt',sans-serif}
 .container{max-width:1100px;margin:0 auto;padding:0 16px}
+
+/* ===== Effect ค่อย ๆ ปรากฏ ===== */
+body{opacity:0;animation:pageIn .55s ease forwards}
+@keyframes pageIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.fade-up{opacity:0;animation:fadeUp .5s ease forwards}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.card{opacity:0;animation:fadeUp .45s ease forwards}
+
+/* ===== Loader วงแหวน ฟ้า-แดง + โลโก้ ===== */
+.swal2-popup.nl-swal{border-radius:16px;font-family:'Sarabun',sans-serif}
+.swal2-popup.nl-swal .swal2-title{font-family:'Prompt',sans-serif;font-size:17px;color:#0F172A}
+.swal2-popup.nl-swal .swal2-html-container{font-size:13px;color:#64748B}
+.nl-ring{position:relative;width:118px;height:118px;margin:6px auto 14px}
+.nl-ring svg{width:100%;height:100%;animation:nlspin 1.25s linear infinite;display:block}
+@keyframes nlspin{to{transform:rotate(360deg)}}
+.nl-ring-logo{position:absolute;inset:20px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:7px;box-shadow:0 2px 12px rgba(15,23,42,.16)}
+.nl-ring-logo img{width:100%;height:100%;object-fit:contain}
+.nl-ring-logo .fallback{font-size:26px}
 img{max-width:100%;display:block}
 button{font-family:inherit;cursor:pointer;border:none;background:none}
 a{text-decoration:none;color:inherit}
@@ -305,6 +324,63 @@ const State = {
 const catColorMap = {}; // map categoryId -> {name,color,icon}
 
 // ============================================================
+//  ระบบแจ้งเตือน / โหลดข้อมูล (SweetAlert2 + วงแหวนฟ้า-แดง)
+// ============================================================
+function ringHtml(){
+  return `
+  <div class="nl-ring">
+    <svg viewBox="0 0 120 120">
+      <defs>
+        <linearGradient id="nlgrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#1E40AF"/>
+          <stop offset="45%" stop-color="#3B82F6"/>
+          <stop offset="75%" stop-color="#EF4444"/>
+          <stop offset="100%" stop-color="#DC2626"/>
+        </linearGradient>
+      </defs>
+      <circle cx="60" cy="60" r="52" fill="none" stroke="#EEF2F7" stroke-width="9"/>
+      <circle cx="60" cy="60" r="52" fill="none" stroke="url(#nlgrad)" stroke-width="9"
+        stroke-linecap="round" stroke-dasharray="215 327"/>
+    </svg>
+    <div class="nl-ring-logo">
+      <img src="${CONFIG.LOGO_URL}" alt="โลโก้" onerror="this.parentNode.innerHTML='<span class=&quot;fallback&quot;>🏫</span>'">
+    </div>
+  </div>`;
+}
+
+const NL = {
+  // แสดงหน้าจอกำลังโหลด
+  loading(title, text){
+    if(!window.Swal) return;
+    Swal.fire({
+      title: title || 'กำลังโหลดข้อมูล',
+      html: (text?`<div style="margin-bottom:4px">${text}</div>`:'') ,
+      iconHtml: null,
+      imageUrl: null,
+      customClass:{popup:'nl-swal'},
+      allowOutsideClick:false, allowEscapeKey:false, showConfirmButton:false,
+      didOpen: ()=>{
+        const c=Swal.getHtmlContainer();
+        if(c) c.insertAdjacentHTML('afterbegin', ringHtml());
+      }
+    });
+  },
+  close(){ if(window.Swal) Swal.close(); },
+  toast(msg, icon){
+    if(!window.Swal) return;
+    Swal.fire({
+      toast:true, position:'bottom', timer:2600, showConfirmButton:false,
+      icon: icon||'success', title: msg,
+      customClass:{popup:'nl-swal'}
+    });
+  },
+  error(msg){
+    if(!window.Swal){ alert(msg); return; }
+    Swal.fire({icon:'error',title:'เกิดข้อผิดพลาด',text:msg,confirmButtonColor:'#1E40AF',customClass:{popup:'nl-swal'}});
+  }
+};
+
+// ============================================================
 //  API helpers
 // ============================================================
 async function apiGet(action, params){
@@ -331,6 +407,7 @@ async function init(){
   document.getElementById('footerCopy').textContent = '© ' + (new Date().getFullYear()+543) + ' ระบบจดหมายข่าวประชาสัมพันธ์ · พัฒนาด้วย Google Apps Script';
   document.getElementById('footerVer').innerHTML = '<i class="ti ti-version"></i> ' + CONFIG.VERSION;
 
+  NL.loading('กำลังโหลดจดหมายข่าว','กรุณารอสักครู่');
   // โหลดหมวดหมู่
   await loadCategories();
   // โหลดฉบับเด่น
@@ -339,6 +416,7 @@ async function init(){
   await loadPublicStats();
   // โหลดรายการ
   await loadList();
+  NL.close();
 
   bindEvents();
 }
@@ -382,7 +460,7 @@ function renderHero(item){
     ? `<img class="hero-bg" src="${item.coverImageUrl}" alt="" style="object-position:${item.coverPos||'50% 50%'}"><div class="hero-overlay"></div>`
     : '';
   return `
-  <div class="hero">
+  <div class="hero fade-up">
     ${bg}
     <div class="hero-grid">
       <div class="hero-body">
@@ -423,7 +501,8 @@ function statCard(bg,fg,ico,label,val){
     <div><div class="stat-label">${label}</div><div class="stat-val">${val}</div></div></div>`;
 }
 
-async function loadList(){
+async function loadList(showLoader){
+  if(showLoader) NL.loading('กำลังโหลดข้อมูล');
   const grid = document.getElementById('gridContainer');
   grid.innerHTML = `<div class="loading"><div class="spinner"></div>กำลังโหลดจดหมายข่าว...</div>`;
   try{
@@ -437,7 +516,9 @@ async function loadList(){
     renderGrid(r.data);
     renderPagination(r.pagination);
     updateToolbar(r.pagination);
+    if(showLoader) NL.close();
   }catch(e){
+    if(showLoader) NL.close();
     grid.innerHTML=`<div class="empty"><i class="ti ti-wifi-off" style="font-size:32px"></i><br>เชื่อมต่อไม่สำเร็จ<br><span style="font-size:12px">ตรวจสอบ API_URL ใน config.js</span></div>`;
     console.error(e);
   }
@@ -455,7 +536,7 @@ function renderGrid(items){
   c.innerHTML=''; c.appendChild(grid);
 }
 
-function renderCard(item){
+function renderCard(item,idx){
   const cat = catColorMap[item.category] || {name:'',color:'#64748B'};
   let badge='';
   if(item.viewCount>=CONFIG.POPULAR_THRESHOLD) badge=`<span class="card-badge popular">⭐ ยอดนิยม</span>`;
@@ -467,7 +548,7 @@ function renderCard(item){
   const bg = item.coverImageUrl?'':`background:${hexToTint(cat.color)}`;
 
   return `
-  <div class="card" onclick="openModal('${item.id}')">
+  <div class="card" style="animation-delay:${(idx||0)*60}ms" onclick="openModal('${item.id}')">
     ${badge}
     <div class="card-cover" style="${bg}">
       ${cover}
@@ -519,6 +600,7 @@ function updateToolbar(pg){
 //  Modal
 // ============================================================
 async function openModal(id){
+  NL.loading('กำลังเปิดจดหมายข่าว');
   const overlay=document.getElementById('modalOverlay');
   const box=document.getElementById('modalContent');
   box.innerHTML=`<div class="loading"><div class="spinner"></div>กำลังโหลด...</div>`;
@@ -527,9 +609,10 @@ async function openModal(id){
 
   try{
     const r=await apiGet('get',{id:id,userAgent:navigator.userAgent.substr(0,100)});
-    if(!r.success){ box.innerHTML=`<div class="empty">${r.error}</div>`; return; }
+    if(!r.success){ box.innerHTML=`<div class="empty">${r.error}</div>`; NL.close(); return; }
     box.innerHTML = renderModal(r.data);
-  }catch(e){ box.innerHTML=`<div class="empty">โหลดไม่สำเร็จ</div>`; }
+    NL.close();
+  }catch(e){ box.innerHTML=`<div class="empty">โหลดไม่สำเร็จ</div>`; NL.close(); }
 }
 
 function renderModal(item){
@@ -617,11 +700,13 @@ function closeModal(){
 
 async function downloadPdf(id,e){
   if(e) e.stopPropagation();
+  NL.loading('กำลังเตรียมไฟล์ PDF');
   try{
     const r=await apiGet('download',{id:id,userAgent:navigator.userAgent.substr(0,100)});
-    if(r.success && r.downloadUrl){ window.open(r.downloadUrl,'_blank'); }
-    else alert(r.error||'ดาวน์โหลดไม่สำเร็จ');
-  }catch(e){ alert('ดาวน์โหลดไม่สำเร็จ'); }
+    NL.close();
+    if(r.success && r.downloadUrl){ window.open(r.downloadUrl,'_blank'); NL.toast('เริ่มดาวน์โหลดแล้ว'); }
+    else NL.error(r.error||'ดาวน์โหลดไม่สำเร็จ');
+  }catch(e){ NL.close(); NL.error('ดาวน์โหลดไม่สำเร็จ'); }
 }
 
 // ดาวน์โหลดรูปอินโฟกราฟิก
@@ -654,16 +739,16 @@ function bindEvents(){
   let t;
   document.getElementById('searchBox').addEventListener('input',e=>{
     clearTimeout(t);
-    t=setTimeout(()=>{ State.search=e.target.value; State.page=1; loadList(); },400);
+    t=setTimeout(()=>{ State.search=e.target.value; State.page=1; loadList(true); },400);
   });
   // chip หมวดหมู่
   document.getElementById('categoryChips').addEventListener('click',e=>{
     const btn=e.target.closest('.chip'); if(!btn) return;
-    State.category=btn.dataset.cat; State.page=1; renderChips(); loadList();
+    State.category=btn.dataset.cat; State.page=1; renderChips(); loadList(true);
   });
   // sort
   document.getElementById('sortSelect').addEventListener('change',e=>{
-    State.sort=e.target.value; State.page=1; loadList();
+    State.sort=e.target.value; State.page=1; loadList(true);
   });
   // ปิด modal เมื่อคลิกพื้นหลัง
   document.getElementById('modalOverlay').addEventListener('click',e=>{
@@ -678,7 +763,7 @@ function bindEvents(){
 }
 
 function goPage(p){
-  State.page=p; loadList();
+  State.page=p; loadList(true);
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
