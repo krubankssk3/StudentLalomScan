@@ -11,14 +11,14 @@
 
 const CONFIG = {
   // 🔴 แก้ตรงนี้! ใส่ Web App URL ของคุณ (ลงท้าย /exec)
-  API_URL: 'https://script.google.com/macros/s/AKfycbwPOU55LkS38Lz8yacxB-6uC240SLlG2M8qnry5CExlDssOJM4kqallaimWWrQH9wXskA/exec',
+  API_URL: 'https://script.google.com/macros/s/วาง_URL_ของคุณตรงนี้/exec',
 
   // ข้อมูลโรงเรียน (แสดงบนหน้าเว็บ)
   SCHOOL_NAME: 'โรงเรียนบ้านละลม',
   SCHOOL_DISTRICT: 'สพป.ศรีสะเกษ เขต 3',
 
   // โลโก้โรงเรียน
-  LOGO_URL: 'https://img2.pic.in.th/pic/Logo-7aecb8e321ff2955.png',
+  LOGO_URL: 'https://drive.google.com/thumbnail?id=16DJNeKH0TqbIkSwtYoBJtFBAAYgQqsq6&sz=w400',
 
   // ข้อมูลผู้พัฒนา (แสดงใน Footer)
   DEVELOPER: 'นายชิติพัทธ์ นิลวรรณ',
