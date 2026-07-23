@@ -37,10 +37,17 @@ body{opacity:0;animation:pageIn .55s ease forwards}
 .swal2-popup.nl-swal{border-radius:16px;font-family:'Sarabun',sans-serif}
 .swal2-popup.nl-swal .swal2-title{font-family:'Prompt',sans-serif;font-size:17px;color:#0F172A}
 .swal2-popup.nl-swal .swal2-html-container{font-size:13px;color:#64748B}
-.nl-ring{position:relative;width:118px;height:118px;margin:6px auto 14px}
-.nl-ring svg{width:100%;height:100%;animation:nlspin 1.25s linear infinite;display:block}
+
+.nl-ring svg{width:100%;height:100%;animation:nlspin 1.05s linear infinite;display:block}
+/* Loader แบบไม่มีกล่องขาว - พื้นหลังเบลอ */
+.swal2-popup.nl-plain{background:transparent!important;box-shadow:none!important;padding:0!important;width:auto!important}
+.swal2-container.nl-blur{backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);background:rgba(15,23,42,.34)!important}
+.swal2-popup.nl-plain .swal2-html-container{margin:0!important;padding:0!important;overflow:visible!important}
+.nl-ring{position:relative;width:132px;height:132px;margin:0 auto}
+.nl-ring-logo{position:absolute;inset:22px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:7px;box-shadow:0 6px 22px rgba(0,0,0,.28)}
+
 @keyframes nlspin{to{transform:rotate(360deg)}}
-.nl-ring-logo{position:absolute;inset:20px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:7px;box-shadow:0 2px 12px rgba(15,23,42,.16)}
+
 .nl-ring-logo img{width:100%;height:100%;object-fit:contain}
 .nl-ring-logo .fallback{font-size:26px}
 img{max-width:100%;display:block}
@@ -350,19 +357,18 @@ function ringHtml(){
 
 const NL = {
   // แสดงหน้าจอกำลังโหลด
-  loading(title, text){
+  loading(){
+    // แสดงเฉพาะวงแหวน + โลโก้ บนพื้นหลังเบลอ (ไม่มีกล่องขาว ไม่มีข้อความ)
     if(!window.Swal) return;
+    if(Swal.isVisible()) return;              // กันเปิดซ้อนกัน
     Swal.fire({
-      title: title || 'กำลังโหลดข้อมูล',
-      html: (text?`<div style="margin-bottom:4px">${text}</div>`:'') ,
-      iconHtml: null,
-      imageUrl: null,
-      customClass:{popup:'nl-swal'},
+      html: ringHtml(),
+      customClass:{popup:'nl-plain', container:'nl-blur'},
+      background:'transparent',
+      backdrop:false,
       allowOutsideClick:false, allowEscapeKey:false, showConfirmButton:false,
-      didOpen: ()=>{
-        const c=Swal.getHtmlContainer();
-        if(c) c.insertAdjacentHTML('afterbegin', ringHtml());
-      }
+      showClass:{popup:'', backdrop:''},       // เปิดทันที ไม่มี animation หน่วง
+      hideClass:{popup:'', backdrop:''}
     });
   },
   close(){ if(window.Swal) Swal.close(); },
@@ -407,15 +413,11 @@ async function init(){
   document.getElementById('footerCopy').textContent = '© ' + (new Date().getFullYear()+543) + ' ระบบจดหมายข่าวประชาสัมพันธ์ · พัฒนาด้วย Google Apps Script';
   document.getElementById('footerVer').innerHTML = '<i class="ti ti-version"></i> ' + CONFIG.VERSION;
 
-  NL.loading('กำลังโหลดจดหมายข่าว','กรุณารอสักครู่');
-  // โหลดหมวดหมู่
+  NL.loading();
+  // โหลดหมวดหมู่ก่อน (ต้องใช้สร้างสี/ชื่อหมวด)
   await loadCategories();
-  // โหลดฉบับเด่น
-  await loadFeatured();
-  // โหลดสถิติรวม
-  await loadPublicStats();
-  // โหลดรายการ
-  await loadList();
+  // ที่เหลือโหลดพร้อมกันทีเดียว - เร็วกว่าโหลดทีละอย่างมาก
+  await Promise.all([ loadStatsAndFeatured(), loadList() ]);
   NL.close();
 
   bindEvents();
@@ -476,12 +478,18 @@ function renderHero(item){
   </div>`;
 }
 
-async function loadPublicStats(){
-  // ใช้ข้อมูลจาก list ทั้งหมดมาคำนวณคร่าว ๆ (public ไม่มี token)
+async function loadStatsAndFeatured(){
+  // ดึงรายการทั้งหมดครั้งเดียว แล้วใช้ทั้งทำสถิติและหาฉบับเด่น (ลดการเรียก API)
   try{
     const r = await apiGet('list',{pageSize:9999,status:'published'});
     if(!r.success) return;
     const items = r.data;
+
+    // --- ฉบับเด่น ---
+    const hero = document.getElementById('heroSection');
+    const feat = items.find(i=>i.isFeatured);
+    hero.innerHTML = feat ? renderHero(feat) : '';
+
     const totalViews = items.reduce((s,i)=>s+(i.viewCount||0),0);
     const totalDl = items.reduce((s,i)=>s+(i.downloadCount||0),0);
     // นับใหม่ในสัปดาห์นี้
@@ -504,7 +512,6 @@ function statCard(bg,fg,ico,label,val){
 async function loadList(showLoader){
   if(showLoader) NL.loading('กำลังโหลดข้อมูล');
   const grid = document.getElementById('gridContainer');
-  grid.innerHTML = `<div class="loading"><div class="spinner"></div>กำลังโหลดจดหมายข่าว...</div>`;
   try{
     const r = await apiGet('list',{
       page:State.page, pageSize:State.pageSize, category:State.category,
@@ -603,7 +610,6 @@ async function openModal(id){
   NL.loading('กำลังเปิดจดหมายข่าว');
   const overlay=document.getElementById('modalOverlay');
   const box=document.getElementById('modalContent');
-  box.innerHTML=`<div class="loading"><div class="spinner"></div>กำลังโหลด...</div>`;
   overlay.classList.add('show');
   document.body.style.overflow='hidden';
 
