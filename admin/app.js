@@ -140,6 +140,8 @@ function logout(){
 //  Navigation
 // ============================================================
 function bindNav(){
+  // ไล่ปรากฏเมนูด้านข้าง
+  document.querySelectorAll('.sidebar .nav-item').forEach((el,i)=>{ el.style.animationDelay=(i*55)+'ms'; });
   document.querySelectorAll('.nav-item[data-page]').forEach(btn=>{
     btn.addEventListener('click',()=>{
       const page=btn.dataset.page;
@@ -188,6 +190,10 @@ async function loadDashboard(){
     }
     el.innerHTML=renderDashboard(r.data);
     drawTrendChart(r.data.monthlyTrend);
+    animateCounters(el);
+    // ตัวเลขกลางวงกลม (SVG) นับขึ้นด้วย
+    const dn=document.getElementById('donutNum');
+    if(dn){ dn.classList.add('count-up'); dn.dataset.target=r.data.publishedCount; animateCounters(el); }
     NL.close();
   }catch(e){
     NL.close();
@@ -206,12 +212,12 @@ function renderDashboard(d){
     const seg=`<circle cx="70" cy="70" r="50" fill="transparent" stroke="${c.color}" stroke-width="18" stroke-dasharray="${pct} 314" stroke-dashoffset="${-offset}" transform="rotate(-90 70 70)"/>`;
     offset+=pct; return seg;
   }).join('');
-  const legend=d.byCategory.map(c=>`<div class="legend-row"><span><span style="color:${c.color}">●</span> ${esc(c.name)}</span><span>${c.count}</span></div>`).join('');
+  const legend=d.byCategory.map(c=>`<div class="legend-row"><span><span style="color:${c.color}">●</span> ${esc(c.name)}</span><span class="count-up" data-target="${c.count}">0</span></div>`).join('');
 
   const topRows=d.topItems.map((t,i)=>{
     const bg=i===0?'linear-gradient(135deg,#F59E0B,#EF4444)':i===1?'linear-gradient(135deg,#3B82F6,#8B5CF6)':'#94A3B8';
-    return `<div class="rank-row"><div class="rank-num" style="background:${bg}">${i+1}</div>
-      <div class="rank-info"><div class="rank-title">${esc(t.title)}</div><div class="rank-meta">${t.viewCount} ยอดดู · ${t.downloadCount} ดาวน์โหลด</div></div></div>`;
+    return `<div class="rank-row fade-up" style="animation-delay:${300+i*70}ms"><div class="rank-num" style="background:${bg}">${i+1}</div>
+      <div class="rank-info"><div class="rank-title">${esc(t.title)}</div><div class="rank-meta"><span class="count-up" data-target="${t.viewCount}">0</span> ยอดดู · <span class="count-up" data-target="${t.downloadCount}">0</span> ดาวน์โหลด</div></div></div>`;
   }).join('') || '<div style="font-size:12px;color:#94A3B8;padding:8px">ยังไม่มีข้อมูล</div>';
 
   return `
@@ -224,23 +230,23 @@ function renderDashboard(d){
   </div>
 
   <div class="stat-grid">
-    ${statCard('#DBEAFE','#1E40AF','ti-news','ทั้งหมด',d.totalNewsletters+' ฉบับ', d.draftCount+' ฉบับเป็นร่าง','#B45309')}
-    ${statCard('#D1FAE5','#059669','ti-circle-check','เผยแพร่แล้ว',d.publishedCount,'','')}
-    ${statCard('#EDE9FE','#7C3AED','ti-eye','ยอดดูรวม',d.totalViews.toLocaleString(),'','')}
-    ${statCard('#FEF3C7','#B45309','ti-download','ดาวน์โหลด',d.totalDownloads.toLocaleString(),'','')}
+    ${statCard('#DBEAFE','#1E40AF','ti-news','ทั้งหมด',d.totalNewsletters,'ฉบับ', d.draftCount+' ฉบับเป็นร่าง','#B45309',0)}
+    ${statCard('#D1FAE5','#059669','ti-circle-check','เผยแพร่แล้ว',d.publishedCount,'','','',1)}
+    ${statCard('#EDE9FE','#7C3AED','ti-eye','ยอดดูรวม',d.totalViews,'','','',2)}
+    ${statCard('#FEF3C7','#B45309','ti-download','ดาวน์โหลด',d.totalDownloads,'','','',3)}
   </div>
 
   <div class="chart-grid">
-    <div class="panel">
+    <div class="panel fade-up" style="animation-delay:380ms">
       <div class="panel-title">แนวโน้มการเข้าชม (6 เดือนล่าสุด)</div>
       <canvas id="trendChart" height="150"></canvas>
     </div>
-    <div class="panel">
+    <div class="panel fade-up" style="animation-delay:460ms">
       <div class="panel-title">แยกตามหมวดหมู่</div>
       <svg width="100%" height="130" viewBox="0 0 140 140" style="max-width:140px;margin:0 auto;display:block">
         <circle cx="70" cy="70" r="50" fill="transparent" stroke="#F1F5F9" stroke-width="18"/>
         ${donut}
-        <text x="70" y="68" text-anchor="middle" font-size="22" font-weight="600" fill="#0F172A">${d.publishedCount}</text>
+        <text x="70" y="68" text-anchor="middle" font-size="22" font-weight="600" fill="#0F172A" id="donutNum">0</text>
         <text x="70" y="84" text-anchor="middle" font-size="9" fill="#94A3B8">เผยแพร่</text>
       </svg>
       <div class="legend">${legend}</div>
@@ -248,11 +254,11 @@ function renderDashboard(d){
   </div>
 
   <div class="bottom-grid">
-    <div class="panel">
+    <div class="panel fade-up" style="animation-delay:540ms">
       <div class="panel-title"><i class="ti ti-flame" style="color:#F59E0B"></i> ฉบับยอดนิยม</div>
       ${topRows}
     </div>
-    <div class="panel">
+    <div class="panel fade-up" style="animation-delay:620ms">
       <div class="panel-title"><i class="ti ti-bolt" style="color:#3B82F6"></i> เริ่มต้นใช้งาน</div>
       <div style="font-size:12px;color:#475569;line-height:1.9">
         <div style="padding:8px;background:#F8FAFC;border-radius:6px;margin-bottom:6px;cursor:pointer" onclick="goToForm()"><i class="ti ti-plus" style="color:#1E40AF"></i> เพิ่มจดหมายข่าวฉบับใหม่</div>
@@ -263,12 +269,31 @@ function renderDashboard(d){
   </div>`;
 }
 
-function statCard(bg,fg,ico,label,val,sub,subColor){
-  return `<div class="stat-card">
+function statCard(bg,fg,ico,label,num,unit,sub,subColor,idx){
+  return `<div class="stat-card fade-up" style="animation-delay:${(idx||0)*90}ms">
     <div class="stat-card-top"><div class="stat-ico" style="background:${bg};color:${fg}"><i class="ti ${ico}"></i></div><div class="stat-card-label">${label}</div></div>
-    <div class="stat-card-val">${val}</div>
+    <div class="stat-card-val"><span class="count-up" data-target="${num||0}">0</span>${unit?`<span class="stat-unit"> ${unit}</span>`:''}</div>
     ${sub?`<div class="stat-card-sub" style="color:${subColor}">${sub}</div>`:''}
   </div>`;
+}
+
+// ===== ตัวเลขนับขึ้นแบบนุ่มนวล (count-up) =====
+function animateCounters(root){
+  const els=(root||document).querySelectorAll('.count-up:not([data-done])');
+  els.forEach(el=>{
+    const target=parseFloat(el.dataset.target)||0;
+    el.setAttribute('data-done','1');
+    if(target===0){ el.textContent='0'; return; }
+    const dur=1200, t0=performance.now();
+    function step(now){
+      const p=Math.min(1,(now-t0)/dur);
+      const eased=1-Math.pow(1-p,3);           // ease-out cubic
+      el.textContent=Math.round(target*eased).toLocaleString();
+      if(p<1) requestAnimationFrame(step);
+      else el.textContent=target.toLocaleString();
+    }
+    requestAnimationFrame(step);
+  });
 }
 
 // วาดกราฟเส้นด้วย canvas (ไม่ต้องพึ่ง library)
@@ -309,7 +334,9 @@ async function loadListData(){
     const r=await apiGet('list',{token:A.token,page:A.page,pageSize:A.pageSize,search:A.search,category:A.category,status:A.status});
     if(r.success){
       A.list=r.data; A.pagination=r.pagination;
-      document.getElementById('navCount').textContent=r.pagination.totalItems;
+      const nc=document.getElementById('navCount');
+      nc.classList.add('count-up'); nc.dataset.target=r.pagination.totalItems;
+      nc.removeAttribute('data-done'); animateCounters(nc.parentNode);
     }
     return r;
   }catch(e){ return {success:false}; }
@@ -350,14 +377,14 @@ async function refreshList(){
   if(!r.success){ wrap.innerHTML='<div class="loading-row">โหลดไม่สำเร็จ</div>'; return; }
   if(r.data.length===0){ wrap.innerHTML='<div class="loading-row"><i class="ti ti-inbox" style="font-size:32px"></i><br>ไม่พบจดหมายข่าว</div>'; return; }
 
-  const rows=r.data.map(renderListRow).join('');
+  const rows=r.data.map((it,i)=>renderListRow(it,i)).join('');
   wrap.innerHTML=`<table>
     <thead><tr><th style="width:38%">หัวข้อ</th><th>หมวดหมู่</th><th>สถานะ</th><th style="text-align:right">ยอดดู</th><th style="text-align:right">วันที่</th><th style="text-align:center">จัดการ</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>${renderListPagination(r.pagination)}`;
 }
 
-function renderListRow(it){
+function renderListRow(it,idx){
   const cat=A.catMap[it.category]||{name:it.category,color:'#64748B'};
   const statusMap={published:['#059669','เผยแพร่'],draft:['#B45309','ร่าง'],archived:['#94A3B8','ถังเก็บ']};
   const st=statusMap[it.status]||['#94A3B8',it.status];
@@ -376,7 +403,7 @@ function renderListRow(it){
       <i class="ti ti-edit actions-edit" title="แก้ไข" onclick="editItem('${it.id}')"></i>
       <i class="ti ti-trash actions-del" title="ย้ายไปถังเก็บ" onclick="confirmDelete('${it.id}','${esc(it.title)}')"></i>`;
   }
-  return `<tr>
+  return `<tr style="animation-delay:${(idx||0)*45}ms">
     <td><div class="t-title"><div class="t-cover" style="${coverBg}">${cover}</div>
       <div style="min-width:0"><div class="t-name">${esc(it.title)}</div><div class="t-sub">${it.hasPdf?'<i class="ti ti-file"></i> PDF':'ไม่มี PDF'}${star}</div></div></div></td>
     <td><span class="cat-pill" style="background:${tint(cat.color)};color:${cat.color}">${esc(cat.name)}</span></td>
