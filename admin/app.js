@@ -101,7 +101,7 @@ async function doLogin(){
 
   btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i> กำลังตรวจสอบ...';
   err.classList.remove('show');
-  NL.loading('กำลังเข้าสู่ระบบ','กำลังตรวจสอบข้อมูลผู้ใช้');
+  NL.loading();
   try{
     const r=await apiPost({action:'login',username,password});
     if(r.success){
@@ -182,8 +182,9 @@ function switchPage(page){
 // ============================================================
 //  Dashboard
 // ============================================================
+let _dashLoadedOnce=false;
 async function loadDashboard(){
-  NL.loading('กำลังโหลดสถิติ');
+  if(!_dashLoadedOnce) NL.loading();
   const el=document.getElementById('page-dashboard');
   try{
     const r=await apiGet('stats',{token:A.token});
@@ -196,6 +197,7 @@ async function loadDashboard(){
     el.innerHTML=renderDashboard(r.data);
     drawTrendChart(r.data.monthlyTrend);
     animateCounters(el);
+    _dashLoadedOnce=true;
     // ตัวเลขกลางวงกลม (SVG) นับขึ้นด้วย
     const dn=document.getElementById('donutNum');
     if(dn){ dn.classList.add('count-up'); dn.dataset.target=r.data.publishedCount; animateCounters(el); }
@@ -457,7 +459,6 @@ function confirmDelete(id,title){
 }
 async function doDelete(id){
   closeDialog();
-  NL.loading('กำลังลบข้อมูล');
   const r=await apiPost({action:'delete',token:A.token,id:id});
   NL.close();
   if(r.success){ toast('ย้ายไปถังเก็บแล้ว','success'); refreshList(); loadListData(); }
@@ -466,7 +467,6 @@ async function doDelete(id){
 
 // กู้คืนจากถังเก็บ (เปลี่ยนสถานะกลับเป็น draft)
 async function restoreItem(id){
-  NL.loading('กำลังกู้คืนข้อมูล');
   const r=await apiPost({action:'update',token:A.token,id:id,status:'draft'});
   NL.close();
   if(r.success){ toast('กู้คืนเรียบร้อย (เป็นสถานะร่าง)','success'); refreshList(); loadListData(); }
@@ -485,7 +485,6 @@ function confirmPurge(id,title){
 }
 async function doPurge(id){
   closeDialog();
-  NL.loading('กำลังลบถาวร','กำลังลบไฟล์ออกจาก Google Drive');
   const r=await apiPost({action:'delete',token:A.token,id:id,hard:true});
   NL.close();
   if(r.success){ toast('ลบถาวรเรียบร้อย','success'); refreshList(); loadListData(); }
@@ -742,7 +741,7 @@ async function saveForm(){
 
   const btn=document.getElementById('btnSave');
   btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i> กำลังบันทึก...';
-  NL.loading('กำลังอัปโหลดจดหมายข่าว','กำลังส่งข้อมูลและไฟล์แนบ กรุณารอสักครู่');
+  NL.loading();
 
   const body={
     action: A.editingId?'update':'create',
@@ -837,21 +836,31 @@ function ringHtml(){
 }
 
 const NL = {
+  _timer: null,
+  _shown: false,
+  // แสดงวงแหวนโหลด - ขึ้นก็ต่อเมื่อโหลดนานเกิน 200ms
   loading(){
-    // แสดงเฉพาะวงแหวน + โลโก้ บนพื้นหลังเบลอ (ไม่มีกล่องขาว ไม่มีข้อความ)
     if(!window.Swal) return;
-    if(Swal.isVisible()) return;              // กันเปิดซ้อนกัน
-    Swal.fire({
-      html: ringHtml(),
-      customClass:{popup:'nl-plain', container:'nl-blur'},
-      background:'transparent',
-      backdrop:false,
-      allowOutsideClick:false, allowEscapeKey:false, showConfirmButton:false,
-      showClass:{popup:'', backdrop:''},       // เปิดทันที ไม่มี animation หน่วง
-      hideClass:{popup:'', backdrop:''}
-    });
+    clearTimeout(this._timer);
+    this._timer = setTimeout(()=>{
+      if(Swal.isVisible()) return;
+      this._shown = true;
+      Swal.fire({
+        html: ringHtml(),
+        customClass:{popup:'nl-plain', container:'nl-blur'},
+        background:'transparent',
+        backdrop:false,
+        allowOutsideClick:false, allowEscapeKey:false, showConfirmButton:false,
+        showClass:{popup:'', backdrop:''},
+        hideClass:{popup:'', backdrop:''}
+      });
+    }, 200);
   },
-  close(){ if(window.Swal) Swal.close(); }
+  close(){
+    clearTimeout(this._timer);
+    if(window.Swal && this._shown){ Swal.close(); this._shown=false; }
+    else if(window.Swal && Swal.isVisible()){ Swal.close(); }
+  }
 };
 
 // toast แบบเดิม แต่ใช้ SweetAlert2
