@@ -357,21 +357,32 @@ function ringHtml(){
 
 const NL = {
   // แสดงหน้าจอกำลังโหลด
+  _timer: null,
+  _shown: false,
+  // แสดงวงแหวนโหลด - จะขึ้นก็ต่อเมื่อโหลดนานเกิน 200ms
+  // (ถ้าข้อมูลมาไว จะไม่เห็น loader เลย ไม่ต้องรอเก้อ)
   loading(){
-    // แสดงเฉพาะวงแหวน + โลโก้ บนพื้นหลังเบลอ (ไม่มีกล่องขาว ไม่มีข้อความ)
     if(!window.Swal) return;
-    if(Swal.isVisible()) return;              // กันเปิดซ้อนกัน
-    Swal.fire({
-      html: ringHtml(),
-      customClass:{popup:'nl-plain', container:'nl-blur'},
-      background:'transparent',
-      backdrop:false,
-      allowOutsideClick:false, allowEscapeKey:false, showConfirmButton:false,
-      showClass:{popup:'', backdrop:''},       // เปิดทันที ไม่มี animation หน่วง
-      hideClass:{popup:'', backdrop:''}
-    });
+    clearTimeout(this._timer);
+    this._timer = setTimeout(()=>{
+      if(Swal.isVisible()) return;
+      this._shown = true;
+      Swal.fire({
+        html: ringHtml(),
+        customClass:{popup:'nl-plain', container:'nl-blur'},
+        background:'transparent',
+        backdrop:false,
+        allowOutsideClick:false, allowEscapeKey:false, showConfirmButton:false,
+        showClass:{popup:'', backdrop:''},
+        hideClass:{popup:'', backdrop:''}
+      });
+    }, 200);
   },
-  close(){ if(window.Swal) Swal.close(); },
+  close(){
+    clearTimeout(this._timer);
+    if(window.Swal && this._shown){ Swal.close(); this._shown=false; }
+    else if(window.Swal && Swal.isVisible()){ Swal.close(); }
+  },
   toast(msg, icon){
     if(!window.Swal) return;
     Swal.fire({
@@ -509,8 +520,7 @@ function statCard(bg,fg,ico,label,val){
     <div><div class="stat-label">${label}</div><div class="stat-val">${val}</div></div></div>`;
 }
 
-async function loadList(showLoader){
-  if(showLoader) NL.loading('กำลังโหลดข้อมูล');
+async function loadList(){
   const grid = document.getElementById('gridContainer');
   try{
     const r = await apiGet('list',{
@@ -523,9 +533,7 @@ async function loadList(showLoader){
     renderGrid(r.data);
     renderPagination(r.pagination);
     updateToolbar(r.pagination);
-    if(showLoader) NL.close();
   }catch(e){
-    if(showLoader) NL.close();
     grid.innerHTML=`<div class="empty"><i class="ti ti-wifi-off" style="font-size:32px"></i><br>เชื่อมต่อไม่สำเร็จ<br><span style="font-size:12px">ตรวจสอบ API_URL ใน config.js</span></div>`;
     console.error(e);
   }
@@ -607,18 +615,17 @@ function updateToolbar(pg){
 //  Modal
 // ============================================================
 async function openModal(id){
-  NL.loading('กำลังเปิดจดหมายข่าว');
   const overlay=document.getElementById('modalOverlay');
   const box=document.getElementById('modalContent');
+  box.innerHTML='<div class="loading"><div class="spinner"></div></div>';
   overlay.classList.add('show');
   document.body.style.overflow='hidden';
 
   try{
     const r=await apiGet('get',{id:id,userAgent:navigator.userAgent.substr(0,100)});
-    if(!r.success){ box.innerHTML=`<div class="empty">${r.error}</div>`; NL.close(); return; }
+    if(!r.success){ box.innerHTML=`<div class="empty">${r.error}</div>`; return; }
     box.innerHTML = renderModal(r.data);
-    NL.close();
-  }catch(e){ box.innerHTML=`<div class="empty">โหลดไม่สำเร็จ</div>`; NL.close(); }
+  }catch(e){ box.innerHTML=`<div class="empty">โหลดไม่สำเร็จ</div>`; }
 }
 
 function renderModal(item){
@@ -706,13 +713,11 @@ function closeModal(){
 
 async function downloadPdf(id,e){
   if(e) e.stopPropagation();
-  NL.loading('กำลังเตรียมไฟล์ PDF');
   try{
     const r=await apiGet('download',{id:id,userAgent:navigator.userAgent.substr(0,100)});
-    NL.close();
     if(r.success && r.downloadUrl){ window.open(r.downloadUrl,'_blank'); NL.toast('เริ่มดาวน์โหลดแล้ว'); }
     else NL.error(r.error||'ดาวน์โหลดไม่สำเร็จ');
-  }catch(e){ NL.close(); NL.error('ดาวน์โหลดไม่สำเร็จ'); }
+  }catch(e){ NL.error('ดาวน์โหลดไม่สำเร็จ'); }
 }
 
 // ดาวน์โหลดรูปอินโฟกราฟิก
@@ -745,16 +750,16 @@ function bindEvents(){
   let t;
   document.getElementById('searchBox').addEventListener('input',e=>{
     clearTimeout(t);
-    t=setTimeout(()=>{ State.search=e.target.value; State.page=1; loadList(true); },400);
+    t=setTimeout(()=>{ State.search=e.target.value; State.page=1; loadList(); },400);
   });
   // chip หมวดหมู่
   document.getElementById('categoryChips').addEventListener('click',e=>{
     const btn=e.target.closest('.chip'); if(!btn) return;
-    State.category=btn.dataset.cat; State.page=1; renderChips(); loadList(true);
+    State.category=btn.dataset.cat; State.page=1; renderChips(); loadList();
   });
   // sort
   document.getElementById('sortSelect').addEventListener('change',e=>{
-    State.sort=e.target.value; State.page=1; loadList(true);
+    State.sort=e.target.value; State.page=1; loadList();
   });
   // ปิด modal เมื่อคลิกพื้นหลัง
   document.getElementById('modalOverlay').addEventListener('click',e=>{
@@ -769,7 +774,7 @@ function bindEvents(){
 }
 
 function goPage(p){
-  State.page=p; loadList(true);
+  State.page=p; loadList();
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
