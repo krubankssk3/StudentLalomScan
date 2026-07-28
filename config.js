@@ -29,7 +29,7 @@ const CONFIG = {
   ADMIN_URL: './admin/',
 
   // ตั้งค่าการแสดงผล
-  ITEMS_PER_PAGE: 12,        // จำนวนการ์ดต่อหน้า
+  ITEMS_PER_PAGE: 15,        // จำนวนการ์ดต่อหน้า
   HOT_THRESHOLD: 200,        // ยอดดูเกินนี้ขึ้น badge "ฮอต"
   POPULAR_THRESHOLD: 400,    // ยอดดูเกินนี้ขึ้น badge "ยอดนิยม"
 
