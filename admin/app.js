@@ -50,82 +50,23 @@ async function apiPost(body){
 //  Init
 // ============================================================
 
-// ===== ระบบโหลดโลโก้ให้ขึ้นไว =====
-// 1) ครั้งแรก: โหลดจากลิงก์ แล้วเก็บสำเนาไว้ในเครื่อง (cache)
-// 2) ครั้งต่อไป: ใช้สำเนาในเครื่อง โลโก้ขึ้นทันที ไม่ต้องรอเน็ต
-const LOGO_CACHE_KEY='nl_logo_cache_v2';  // v2: ล้าง cache เก่าที่อาจเสียทิ้ง
+// ===== โลโก้ =====
+// ที่อยู่รูปถูกใส่ไว้ใน HTML แล้ว (src="logo.png") เบราว์เซอร์จึงเริ่มโหลด
+// ตั้งแต่วินาทีแรกที่อ่านหน้า - เร็วที่สุด ไม่ต้องรอ JS
+// ฟังก์ชันนี้แค่คอยดูแล: โหลดเสร็จ = แสดงผล / โหลดไม่ได้ = ใช้ลิงก์สำรองใน config
 function setLogos(ids){
-  // ลำดับการหาโลโก้ (ใช้ตัวแรกที่โหลดได้):
-  //   1) logo.png ที่วางไว้ในโฟลเดอร์เดียวกับหน้าเว็บ  <- เร็วที่สุด
-  //   2) ../logo.png (กรณีหน้า admin ที่อยู่ในโฟลเดอร์ย่อย)
-  //   3) ลิงก์ใน config (เช่น Google Drive)            <- สำรอง
   const remote = CONFIG.LOGO_URL || '';
-  const candidates = ['logo.png', '../logo.png'].concat(remote ? [remote] : []);
-
-  // ถ้าเคยเก็บสำเนาไว้ ใช้ทันที (ขึ้นเลยไม่ต้องรอโหลด)
-  // ตรวจให้แน่ใจว่าเป็นข้อมูลรูปจริง ไม่ใช่ค่าเสีย
-  let cached=null;
-  try{
-    const raw=localStorage.getItem(LOGO_CACHE_KEY);
-    if(raw){
-      const o=JSON.parse(raw);
-      if(o && typeof o.data==='string' && o.data.indexOf('data:image/')===0) cached=o.data;
-    }
-  }catch(e){}
-  try{ localStorage.removeItem('nl_logo_cache_v1'); }catch(e){}   // ทิ้งของเก่า
-
-  function apply(src, isFinal, onFail){
-    ids.forEach(id=>{
-      const el=document.getElementById(id); if(!el) return;
-      el.onload=function(){ this.classList.add('loaded'); this.style.display=''; };
-      el.onerror=function(){
-        if(onFail) { onFail(); return; }
-        if(isFinal) this.style.display='none';   // ปล่อยให้ placeholder 🏫 แสดง
-      };
-      el.src=src;
-      if(el.complete && el.naturalWidth) el.classList.add('loaded');
+  ids.forEach(id=>{
+    const el=document.getElementById(id); if(!el) return;
+    if(el.complete && el.naturalWidth) el.classList.add('loaded');   // มาถึงก่อน JS แล้ว
+    el.addEventListener('load', ()=>el.classList.add('loaded'));
+    el.addEventListener('error', function(){
+      if(remote && this.src.indexOf('logo.png')!==-1){ this.src=remote; }  // ถอยไปใช้ลิงก์สำรอง
+      else { this.style.display='none'; }                                   // ปล่อยให้ 🏫 แสดงแทน
     });
-    const fav=document.getElementById('favIcon'); if(fav) fav.href=src;
-  }
-
-  // ใช้ cache ก่อน แต่ถ้าใช้ไม่ได้ ให้ทิ้ง cache แล้วไปหาไฟล์จริงต่อ
-  if(cached){
-    apply(cached, false, function(){
-      try{ localStorage.removeItem(LOGO_CACHE_KEY); }catch(e){}
-      probeCandidates();
-    });
-    return;
-  }
-  probeCandidates();
-  return;
-
-  function probeCandidates(){
-
-    // ไล่ทดสอบทีละตัว แล้วใช้ตัวแรกที่โหลดได้จริง
-    (function tryNext(i){
-      if(i>=candidates.length){
-        ids.forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
-        return;
-      }
-      const url=candidates[i];
-      const probe=new Image();
-      probe.onload=function(){ apply(url, i===candidates.length-1); cacheLogo(url); };
-      probe.onerror=function(){ tryNext(i+1); };
-      probe.src=url;
-    })(0);
-  }
-}
-
-// เก็บสำเนาโลโก้ไว้ในเครื่อง เพื่อให้ครั้งหน้าขึ้นทันที
-function cacheLogo(url){
-  try{
-    fetch(url,{mode:'cors'}).then(r=>r.ok?r.blob():null).then(b=>{
-      if(!b) return;
-      const fr=new FileReader();
-      fr.onload=()=>{ try{ localStorage.setItem(LOGO_CACHE_KEY, JSON.stringify({url:url,data:fr.result})); }catch(e){} };
-      fr.readAsDataURL(b);
-    }).catch(()=>{});
-  }catch(e){}
+  });
+  // ล้าง cache เก่าที่ไม่ใช้แล้ว
+  try{ localStorage.removeItem('nl_logo_cache_v1'); localStorage.removeItem('nl_logo_cache_v2'); }catch(e){}
 }
 
 function initConfig(){
