@@ -58,14 +58,15 @@ function setLogos(ids){
   const remote = CONFIG.LOGO_URL || '';
   ids.forEach(id=>{
     const el=document.getElementById(id); if(!el) return;
-    if(el.complete && el.naturalWidth) el.classList.add('loaded');   // มาถึงก่อน JS แล้ว
-    el.addEventListener('load', ()=>el.classList.add('loaded'));
+    // รูปแสดงเองอยู่แล้ว - JS แค่คอยจัดการกรณีโหลดไม่ได้
+    const hidePh=()=>{ const ph=el.parentNode&&el.parentNode.querySelector('.logo-ph'); if(ph) ph.style.display='none'; };
+    if(el.complete && el.naturalWidth) hidePh();
+    el.addEventListener('load', hidePh);
     el.addEventListener('error', function(){
       if(remote && this.src.indexOf('logo.png')!==-1){ this.src=remote; }  // ถอยไปใช้ลิงก์สำรอง
       else { this.style.display='none'; }                                   // ปล่อยให้ 🏫 แสดงแทน
     });
   });
-  // ล้าง cache เก่าที่ไม่ใช้แล้ว
   try{ localStorage.removeItem('nl_logo_cache_v1'); localStorage.removeItem('nl_logo_cache_v2'); }catch(e){}
 }
 
