@@ -53,7 +53,7 @@ async function apiPost(body){
 // ===== ระบบโหลดโลโก้ให้ขึ้นไว =====
 // 1) ครั้งแรก: โหลดจากลิงก์ แล้วเก็บสำเนาไว้ในเครื่อง (cache)
 // 2) ครั้งต่อไป: ใช้สำเนาในเครื่อง โลโก้ขึ้นทันที ไม่ต้องรอเน็ต
-const LOGO_CACHE_KEY='nl_logo_cache_v1';
+const LOGO_CACHE_KEY='nl_logo_cache_v2';  // v2: ล้าง cache เก่าที่อาจเสียทิ้ง
 function setLogos(ids){
   // ลำดับการหาโลโก้ (ใช้ตัวแรกที่โหลดได้):
   //   1) logo.png ที่วางไว้ในโฟลเดอร์เดียวกับหน้าเว็บ  <- เร็วที่สุด
@@ -63,38 +63,57 @@ function setLogos(ids){
   const candidates = ['logo.png', '../logo.png'].concat(remote ? [remote] : []);
 
   // ถ้าเคยเก็บสำเนาไว้ ใช้ทันที (ขึ้นเลยไม่ต้องรอโหลด)
+  // ตรวจให้แน่ใจว่าเป็นข้อมูลรูปจริง ไม่ใช่ค่าเสีย
   let cached=null;
   try{
     const raw=localStorage.getItem(LOGO_CACHE_KEY);
-    if(raw){ const o=JSON.parse(raw); if(o && o.data) cached=o.data; }
+    if(raw){
+      const o=JSON.parse(raw);
+      if(o && typeof o.data==='string' && o.data.indexOf('data:image/')===0) cached=o.data;
+    }
   }catch(e){}
+  try{ localStorage.removeItem('nl_logo_cache_v1'); }catch(e){}   // ทิ้งของเก่า
 
-  function apply(src, isFinal){
+  function apply(src, isFinal, onFail){
     ids.forEach(id=>{
       const el=document.getElementById(id); if(!el) return;
       el.onload=function(){ this.classList.add('loaded'); this.style.display=''; };
-      el.onerror=function(){ if(isFinal) this.style.display='none'; }; // ปล่อยให้ placeholder 🏫 แสดง
+      el.onerror=function(){
+        if(onFail) { onFail(); return; }
+        if(isFinal) this.style.display='none';   // ปล่อยให้ placeholder 🏫 แสดง
+      };
       el.src=src;
       if(el.complete && el.naturalWidth) el.classList.add('loaded');
     });
     const fav=document.getElementById('favIcon'); if(fav) fav.href=src;
-    const pre=document.getElementById('logoPreload'); if(pre) pre.href=src;
   }
 
-  if(cached){ apply(cached, true); return; }
+  // ใช้ cache ก่อน แต่ถ้าใช้ไม่ได้ ให้ทิ้ง cache แล้วไปหาไฟล์จริงต่อ
+  if(cached){
+    apply(cached, false, function(){
+      try{ localStorage.removeItem(LOGO_CACHE_KEY); }catch(e){}
+      probeCandidates();
+    });
+    return;
+  }
+  probeCandidates();
+  return;
 
-  // ไล่ทดสอบทีละตัวเบื้องหลัง แล้วค่อยใช้ตัวที่โหลดได้จริง
-  (function tryNext(i){
-    if(i>=candidates.length){ apply('', true); return; }
-    const url=candidates[i];
-    const probe=new Image();
-    probe.onload=function(){
-      apply(url, i===candidates.length-1);
-      cacheLogo(url);
-    };
-    probe.onerror=function(){ tryNext(i+1); };
-    probe.src=url;
-  })(0);
+  function probeCandidates(){
+
+    // ไล่ทดสอบทีละตัว แล้วใช้ตัวแรกที่โหลดได้จริง
+    (function tryNext(i){
+      if(i>=candidates.length){
+        ids.forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
+        return;
+      }
+      const url=candidates[i];
+      const probe=new Image();
+      probe.onload=function(){ apply(url, i===candidates.length-1); cacheLogo(url); };
+      probe.onerror=function(){ tryNext(i+1); };
+      probe.src=url;
+    })(0);
+  }
 }
 
 // เก็บสำเนาโลโก้ไว้ในเครื่อง เพื่อให้ครั้งหน้าขึ้นทันที
