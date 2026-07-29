@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>จดหมายข่าวประชาสัมพันธ์ - โรงเรียนบ้านละลม</title>
 <link rel="icon" id="favIcon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%AB%3C/text%3E%3C/svg%3E">
+<link rel="preload" as="image" id="logoPreload">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=Prompt:wght@500;600;700&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.7.0/dist/tabler-icons.min.css" rel="stylesheet">
@@ -66,6 +67,14 @@ a{text-decoration:none;color:inherit}
 .brand{display:flex;align-items:center;gap:12px}
 .brand-logo{width:46px;height:46px;border-radius:50%;background:#fff;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;padding:3px}
 .brand-logo img{width:100%;height:100%;object-fit:contain}
+/* โลโก้: ซ่อนไว้จนโหลดเสร็จ แล้วค่อยจางเข้ามา (กันเห็นรูปแตกระหว่างรอ) */
+.logo-box{position:relative}
+.logo-box img{opacity:0;transition:opacity .35s ease}
+.logo-box img.loaded{opacity:1}
+.logo-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:60%;color:#94A3B8;background:linear-gradient(100deg,#F1F5F9 30%,#E2E8F0 50%,#F1F5F9 70%);background-size:200% 100%;animation:phShimmer 1.3s linear infinite;border-radius:50%}
+@keyframes phShimmer{to{background-position:-200% 0}}
+.logo-box img.loaded + .logo-ph{display:none}
+
 .brand-title{font-size:16px;font-weight:600}
 .brand-sub{font-size:11px;color:var(--text-2)}
 .btn-admin{padding:8px 14px;font-size:13px;background:var(--primary);color:#fff;border-radius:var(--radius-sm);display:flex;align-items:center;gap:5px;transition:.2s}
@@ -247,7 +256,7 @@ a{text-decoration:none;color:inherit}
 <header class="header">
   <div class="header-inner">
     <div class="brand">
-      <div class="brand-logo"><img id="brandLogo" alt="โลโก้"></div>
+      <div class="brand-logo logo-box"><img id="brandLogo" alt=""><div class="logo-ph" style="font-size:22px">🏫</div></div>
       <div>
         <div class="brand-title display" id="schoolName">จดหมายข่าวประชาสัมพันธ์</div>
         <div class="brand-sub" id="schoolSub">โรงเรียน · เขตพื้นที่</div>
@@ -294,7 +303,7 @@ a{text-decoration:none;color:inherit}
 <footer class="footer">
   <div class="footer-inner">
     <div class="footer-top">
-      <div class="footer-logo"><img id="footerLogo" alt="โลโก้"></div>
+      <div class="footer-logo logo-box"><img id="footerLogo" alt=""><div class="logo-ph" style="font-size:26px">🏫</div></div>
       <div style="flex:1;min-width:200px">
         <div class="footer-dev-label"><i class="ti ti-code"></i> ผู้พัฒนาระบบ</div>
         <div class="footer-dev-name display" id="devName">ผู้พัฒนา</div>
@@ -436,14 +445,48 @@ async function apiGet(action, params){
 // ============================================================
 //  Init
 // ============================================================
+
+// ===== ระบบโหลดโลโก้ให้ขึ้นไว =====
+// 1) ครั้งแรก: โหลดจากลิงก์ แล้วเก็บสำเนาไว้ในเครื่อง (cache)
+// 2) ครั้งต่อไป: ใช้สำเนาในเครื่อง โลโก้ขึ้นทันที ไม่ต้องรอเน็ต
+const LOGO_CACHE_KEY='nl_logo_cache_v1';
+function setLogos(ids){
+  const url=CONFIG.LOGO_URL;
+  if(!url) return;
+  // บอกเบราว์เซอร์ให้เริ่มโหลดรูปตั้งแต่วินาทีแรก
+  const pre=document.getElementById('logoPreload'); if(pre) pre.href=url;
+
+  let cached=null;
+  try{
+    const raw=localStorage.getItem(LOGO_CACHE_KEY);
+    if(raw){ const o=JSON.parse(raw); if(o && o.url===url && o.data) cached=o.data; }
+  }catch(e){}
+
+  const src = cached || url;
+  ids.forEach(id=>{
+    const el=document.getElementById(id); if(!el) return;
+    el.onload=function(){ this.classList.add('loaded'); };
+    el.onerror=function(){ this.style.display='none'; };  // ปล่อยให้ placeholder 🏫 แสดงแทน
+    el.src=src;
+    if(el.complete && el.naturalWidth) el.classList.add('loaded');
+  });
+
+  // เก็บสำเนาไว้ใช้ครั้งหน้า (ทำเงียบ ๆ เบื้องหลัง ไม่กระทบการแสดงผล)
+  if(!cached){
+    fetch(url,{mode:'cors'}).then(r=>r.ok?r.blob():null).then(b=>{
+      if(!b) return;
+      const fr=new FileReader();
+      fr.onload=()=>{ try{ localStorage.setItem(LOGO_CACHE_KEY, JSON.stringify({url:url,data:fr.result})); }catch(e){} };
+      fr.readAsDataURL(b);
+    }).catch(()=>{});
+  }
+}
+
 async function init(){
   // ใส่ค่าคงที่จาก config
-  document.getElementById('brandLogo').src = CONFIG.LOGO_URL;
+  setLogos(['brandLogo','footerLogo']);
   // ใช้โลโก้โรงเรียนเป็นไอคอนบนแท็บเบราว์เซอร์
   const fav=document.getElementById('favIcon'); if(fav && CONFIG.LOGO_URL) fav.href=CONFIG.LOGO_URL;
-  document.getElementById('footerLogo').src = CONFIG.LOGO_URL;
-  document.getElementById('brandLogo').onerror = function(){this.parentNode.innerHTML='<span style="font-size:22px">🏫</span>'};
-  document.getElementById('footerLogo').onerror = function(){this.parentNode.innerHTML='<span style="font-size:26px">🏫</span>'};
   document.getElementById('schoolSub').textContent = CONFIG.SCHOOL_NAME + ' · ' + CONFIG.SCHOOL_DISTRICT;
   document.getElementById('adminLink').href = CONFIG.ADMIN_URL;
   document.getElementById('devName').textContent = CONFIG.DEVELOPER;
