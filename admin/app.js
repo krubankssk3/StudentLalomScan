@@ -49,12 +49,45 @@ async function apiPost(body){
 // ============================================================
 //  Init
 // ============================================================
-function initConfig(){
-  ['loginLogo','sideLogo','footLogo'].forEach(id=>{
-    const el=document.getElementById(id);
-    el.src=CONFIG.LOGO_URL;
-    el.onerror=function(){this.parentNode.innerHTML='<span style="font-size:'+(id==='loginLogo'?'30':'20')+'px">🏫</span>'};
+
+// ===== ระบบโหลดโลโก้ให้ขึ้นไว =====
+// 1) ครั้งแรก: โหลดจากลิงก์ แล้วเก็บสำเนาไว้ในเครื่อง (cache)
+// 2) ครั้งต่อไป: ใช้สำเนาในเครื่อง โลโก้ขึ้นทันที ไม่ต้องรอเน็ต
+const LOGO_CACHE_KEY='nl_logo_cache_v1';
+function setLogos(ids){
+  const url=CONFIG.LOGO_URL;
+  if(!url) return;
+  // บอกเบราว์เซอร์ให้เริ่มโหลดรูปตั้งแต่วินาทีแรก
+  const pre=document.getElementById('logoPreload'); if(pre) pre.href=url;
+
+  let cached=null;
+  try{
+    const raw=localStorage.getItem(LOGO_CACHE_KEY);
+    if(raw){ const o=JSON.parse(raw); if(o && o.url===url && o.data) cached=o.data; }
+  }catch(e){}
+
+  const src = cached || url;
+  ids.forEach(id=>{
+    const el=document.getElementById(id); if(!el) return;
+    el.onload=function(){ this.classList.add('loaded'); };
+    el.onerror=function(){ this.style.display='none'; };  // ปล่อยให้ placeholder 🏫 แสดงแทน
+    el.src=src;
+    if(el.complete && el.naturalWidth) el.classList.add('loaded');
   });
+
+  // เก็บสำเนาไว้ใช้ครั้งหน้า (ทำเงียบ ๆ เบื้องหลัง ไม่กระทบการแสดงผล)
+  if(!cached){
+    fetch(url,{mode:'cors'}).then(r=>r.ok?r.blob():null).then(b=>{
+      if(!b) return;
+      const fr=new FileReader();
+      fr.onload=()=>{ try{ localStorage.setItem(LOGO_CACHE_KEY, JSON.stringify({url:url,data:fr.result})); }catch(e){} };
+      fr.readAsDataURL(b);
+    }).catch(()=>{});
+  }
+}
+
+function initConfig(){
+  setLogos(['loginLogo','sideLogo','footLogo']);
   const fav=document.getElementById('favIcon'); if(fav && CONFIG.LOGO_URL) fav.href=CONFIG.LOGO_URL;
   document.getElementById('sideSchool').textContent=CONFIG.SCHOOL_NAME;
   document.getElementById('footDev').textContent=CONFIG.DEVELOPER;
