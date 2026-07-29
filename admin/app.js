@@ -55,35 +55,58 @@ async function apiPost(body){
 // 2) ครั้งต่อไป: ใช้สำเนาในเครื่อง โลโก้ขึ้นทันที ไม่ต้องรอเน็ต
 const LOGO_CACHE_KEY='nl_logo_cache_v1';
 function setLogos(ids){
-  const url=CONFIG.LOGO_URL;
-  if(!url) return;
-  // บอกเบราว์เซอร์ให้เริ่มโหลดรูปตั้งแต่วินาทีแรก
-  const pre=document.getElementById('logoPreload'); if(pre) pre.href=url;
+  // ลำดับการหาโลโก้ (ใช้ตัวแรกที่โหลดได้):
+  //   1) logo.png ที่วางไว้ในโฟลเดอร์เดียวกับหน้าเว็บ  <- เร็วที่สุด
+  //   2) ../logo.png (กรณีหน้า admin ที่อยู่ในโฟลเดอร์ย่อย)
+  //   3) ลิงก์ใน config (เช่น Google Drive)            <- สำรอง
+  const remote = CONFIG.LOGO_URL || '';
+  const candidates = ['logo.png', '../logo.png'].concat(remote ? [remote] : []);
 
+  // ถ้าเคยเก็บสำเนาไว้ ใช้ทันที (ขึ้นเลยไม่ต้องรอโหลด)
   let cached=null;
   try{
     const raw=localStorage.getItem(LOGO_CACHE_KEY);
-    if(raw){ const o=JSON.parse(raw); if(o && o.url===url && o.data) cached=o.data; }
+    if(raw){ const o=JSON.parse(raw); if(o && o.data) cached=o.data; }
   }catch(e){}
 
-  const src = cached || url;
-  ids.forEach(id=>{
-    const el=document.getElementById(id); if(!el) return;
-    el.onload=function(){ this.classList.add('loaded'); };
-    el.onerror=function(){ this.style.display='none'; };  // ปล่อยให้ placeholder 🏫 แสดงแทน
-    el.src=src;
-    if(el.complete && el.naturalWidth) el.classList.add('loaded');
-  });
+  function apply(src, isFinal){
+    ids.forEach(id=>{
+      const el=document.getElementById(id); if(!el) return;
+      el.onload=function(){ this.classList.add('loaded'); this.style.display=''; };
+      el.onerror=function(){ if(isFinal) this.style.display='none'; }; // ปล่อยให้ placeholder 🏫 แสดง
+      el.src=src;
+      if(el.complete && el.naturalWidth) el.classList.add('loaded');
+    });
+    const fav=document.getElementById('favIcon'); if(fav) fav.href=src;
+    const pre=document.getElementById('logoPreload'); if(pre) pre.href=src;
+  }
 
-  // เก็บสำเนาไว้ใช้ครั้งหน้า (ทำเงียบ ๆ เบื้องหลัง ไม่กระทบการแสดงผล)
-  if(!cached){
+  if(cached){ apply(cached, true); return; }
+
+  // ไล่ทดสอบทีละตัวเบื้องหลัง แล้วค่อยใช้ตัวที่โหลดได้จริง
+  (function tryNext(i){
+    if(i>=candidates.length){ apply('', true); return; }
+    const url=candidates[i];
+    const probe=new Image();
+    probe.onload=function(){
+      apply(url, i===candidates.length-1);
+      cacheLogo(url);
+    };
+    probe.onerror=function(){ tryNext(i+1); };
+    probe.src=url;
+  })(0);
+}
+
+// เก็บสำเนาโลโก้ไว้ในเครื่อง เพื่อให้ครั้งหน้าขึ้นทันที
+function cacheLogo(url){
+  try{
     fetch(url,{mode:'cors'}).then(r=>r.ok?r.blob():null).then(b=>{
       if(!b) return;
       const fr=new FileReader();
       fr.onload=()=>{ try{ localStorage.setItem(LOGO_CACHE_KEY, JSON.stringify({url:url,data:fr.result})); }catch(e){} };
       fr.readAsDataURL(b);
     }).catch(()=>{});
-  }
+  }catch(e){}
 }
 
 function initConfig(){
