@@ -55,6 +55,7 @@ function initConfig(){
     el.src=CONFIG.LOGO_URL;
     el.onerror=function(){this.parentNode.innerHTML='<span style="font-size:'+(id==='loginLogo'?'30':'20')+'px">🏫</span>'};
   });
+  const fav=document.getElementById('favIcon'); if(fav && CONFIG.LOGO_URL) fav.href=CONFIG.LOGO_URL;
   document.getElementById('sideSchool').textContent=CONFIG.SCHOOL_NAME;
   document.getElementById('footDev').textContent=CONFIG.DEVELOPER;
   document.getElementById('footRole').innerHTML=CONFIG.DEVELOPER_ROLE+' · '+CONFIG.SCHOOL_DISTRICT;
