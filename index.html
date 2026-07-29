@@ -69,11 +69,11 @@ a{text-decoration:none;color:inherit}
 .brand-logo img{width:100%;height:100%;object-fit:contain}
 /* โลโก้: ซ่อนไว้จนโหลดเสร็จ แล้วค่อยจางเข้ามา (กันเห็นรูปแตกระหว่างรอ) */
 .logo-box{position:relative}
-.logo-box img{opacity:0;transition:opacity .12s ease}
-.logo-box img.loaded{opacity:1}
-.logo-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:60%;color:#94A3B8;background:linear-gradient(100deg,#F1F5F9 30%,#E2E8F0 50%,#F1F5F9 70%);background-size:200% 100%;animation:phShimmer 1.3s linear infinite;border-radius:50%}
+/* รูปแสดงทันทีที่โหลดเสร็จ ไม่ต้องรอ JS สั่ง */
+.logo-box img{position:relative;z-index:1}
+/* placeholder อยู่ข้างหลัง - เห็นเฉพาะตอนรูปยังมาไม่ถึง */
+.logo-ph{position:absolute;inset:0;z-index:0;display:flex;align-items:center;justify-content:center;font-size:60%;color:#94A3B8;background:linear-gradient(100deg,#F1F5F9 30%,#E2E8F0 50%,#F1F5F9 70%);background-size:200% 100%;animation:phShimmer 1.3s linear infinite;border-radius:50%}
 @keyframes phShimmer{to{background-position:-200% 0}}
-.logo-box img.loaded + .logo-ph{display:none}
 
 .brand-title{font-size:16px;font-weight:600}
 .brand-sub{font-size:11px;color:var(--text-2)}
@@ -454,14 +454,15 @@ function setLogos(ids){
   const remote = CONFIG.LOGO_URL || '';
   ids.forEach(id=>{
     const el=document.getElementById(id); if(!el) return;
-    if(el.complete && el.naturalWidth) el.classList.add('loaded');   // มาถึงก่อน JS แล้ว
-    el.addEventListener('load', ()=>el.classList.add('loaded'));
+    // รูปแสดงเองอยู่แล้ว - JS แค่คอยจัดการกรณีโหลดไม่ได้
+    const hidePh=()=>{ const ph=el.parentNode&&el.parentNode.querySelector('.logo-ph'); if(ph) ph.style.display='none'; };
+    if(el.complete && el.naturalWidth) hidePh();
+    el.addEventListener('load', hidePh);
     el.addEventListener('error', function(){
       if(remote && this.src.indexOf('logo.png')!==-1){ this.src=remote; }  // ถอยไปใช้ลิงก์สำรอง
       else { this.style.display='none'; }                                   // ปล่อยให้ 🏫 แสดงแทน
     });
   });
-  // ล้าง cache เก่าที่ไม่ใช้แล้ว
   try{ localStorage.removeItem('nl_logo_cache_v1'); localStorage.removeItem('nl_logo_cache_v2'); }catch(e){}
 }
 
