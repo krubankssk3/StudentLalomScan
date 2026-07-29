@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>จดหมายข่าวประชาสัมพันธ์ - โรงเรียนบ้านละลม</title>
-<link rel="icon" id="favIcon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%AB%3C/text%3E%3C/svg%3E">
+<link rel="preload" as="image" href="logo.png">
+<link rel="icon" href="logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=Prompt:wght@500;600;700&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.7.0/dist/tabler-icons.min.css" rel="stylesheet">
@@ -68,7 +69,7 @@ a{text-decoration:none;color:inherit}
 .brand-logo img{width:100%;height:100%;object-fit:contain}
 /* โลโก้: ซ่อนไว้จนโหลดเสร็จ แล้วค่อยจางเข้ามา (กันเห็นรูปแตกระหว่างรอ) */
 .logo-box{position:relative}
-.logo-box img{opacity:0;transition:opacity .35s ease}
+.logo-box img{opacity:0;transition:opacity .12s ease}
 .logo-box img.loaded{opacity:1}
 .logo-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:60%;color:#94A3B8;background:linear-gradient(100deg,#F1F5F9 30%,#E2E8F0 50%,#F1F5F9 70%);background-size:200% 100%;animation:phShimmer 1.3s linear infinite;border-radius:50%}
 @keyframes phShimmer{to{background-position:-200% 0}}
@@ -255,7 +256,7 @@ a{text-decoration:none;color:inherit}
 <header class="header">
   <div class="header-inner">
     <div class="brand">
-      <div class="brand-logo logo-box"><img id="brandLogo" alt=""><div class="logo-ph" style="font-size:22px">🏫</div></div>
+      <div class="brand-logo logo-box"><img id="brandLogo" src="logo.png" alt="" fetchpriority="high"><div class="logo-ph" style="font-size:22px">🏫</div></div>
       <div>
         <div class="brand-title display" id="schoolName">จดหมายข่าวประชาสัมพันธ์</div>
         <div class="brand-sub" id="schoolSub">โรงเรียน · เขตพื้นที่</div>
@@ -302,7 +303,7 @@ a{text-decoration:none;color:inherit}
 <footer class="footer">
   <div class="footer-inner">
     <div class="footer-top">
-      <div class="footer-logo logo-box"><img id="footerLogo" alt=""><div class="logo-ph" style="font-size:26px">🏫</div></div>
+      <div class="footer-logo logo-box"><img id="footerLogo" src="logo.png" alt=""><div class="logo-ph" style="font-size:26px">🏫</div></div>
       <div style="flex:1;min-width:200px">
         <div class="footer-dev-label"><i class="ti ti-code"></i> ผู้พัฒนาระบบ</div>
         <div class="footer-dev-name display" id="devName">ผู้พัฒนา</div>
@@ -445,82 +446,23 @@ async function apiGet(action, params){
 //  Init
 // ============================================================
 
-// ===== ระบบโหลดโลโก้ให้ขึ้นไว =====
-// 1) ครั้งแรก: โหลดจากลิงก์ แล้วเก็บสำเนาไว้ในเครื่อง (cache)
-// 2) ครั้งต่อไป: ใช้สำเนาในเครื่อง โลโก้ขึ้นทันที ไม่ต้องรอเน็ต
-const LOGO_CACHE_KEY='nl_logo_cache_v2';  // v2: ล้าง cache เก่าที่อาจเสียทิ้ง
+// ===== โลโก้ =====
+// ที่อยู่รูปถูกใส่ไว้ใน HTML แล้ว (src="logo.png") เบราว์เซอร์จึงเริ่มโหลด
+// ตั้งแต่วินาทีแรกที่อ่านหน้า - เร็วที่สุด ไม่ต้องรอ JS
+// ฟังก์ชันนี้แค่คอยดูแล: โหลดเสร็จ = แสดงผล / โหลดไม่ได้ = ใช้ลิงก์สำรองใน config
 function setLogos(ids){
-  // ลำดับการหาโลโก้ (ใช้ตัวแรกที่โหลดได้):
-  //   1) logo.png ที่วางไว้ในโฟลเดอร์เดียวกับหน้าเว็บ  <- เร็วที่สุด
-  //   2) ../logo.png (กรณีหน้า admin ที่อยู่ในโฟลเดอร์ย่อย)
-  //   3) ลิงก์ใน config (เช่น Google Drive)            <- สำรอง
   const remote = CONFIG.LOGO_URL || '';
-  const candidates = ['logo.png', '../logo.png'].concat(remote ? [remote] : []);
-
-  // ถ้าเคยเก็บสำเนาไว้ ใช้ทันที (ขึ้นเลยไม่ต้องรอโหลด)
-  // ตรวจให้แน่ใจว่าเป็นข้อมูลรูปจริง ไม่ใช่ค่าเสีย
-  let cached=null;
-  try{
-    const raw=localStorage.getItem(LOGO_CACHE_KEY);
-    if(raw){
-      const o=JSON.parse(raw);
-      if(o && typeof o.data==='string' && o.data.indexOf('data:image/')===0) cached=o.data;
-    }
-  }catch(e){}
-  try{ localStorage.removeItem('nl_logo_cache_v1'); }catch(e){}   // ทิ้งของเก่า
-
-  function apply(src, isFinal, onFail){
-    ids.forEach(id=>{
-      const el=document.getElementById(id); if(!el) return;
-      el.onload=function(){ this.classList.add('loaded'); this.style.display=''; };
-      el.onerror=function(){
-        if(onFail) { onFail(); return; }
-        if(isFinal) this.style.display='none';   // ปล่อยให้ placeholder 🏫 แสดง
-      };
-      el.src=src;
-      if(el.complete && el.naturalWidth) el.classList.add('loaded');
+  ids.forEach(id=>{
+    const el=document.getElementById(id); if(!el) return;
+    if(el.complete && el.naturalWidth) el.classList.add('loaded');   // มาถึงก่อน JS แล้ว
+    el.addEventListener('load', ()=>el.classList.add('loaded'));
+    el.addEventListener('error', function(){
+      if(remote && this.src.indexOf('logo.png')!==-1){ this.src=remote; }  // ถอยไปใช้ลิงก์สำรอง
+      else { this.style.display='none'; }                                   // ปล่อยให้ 🏫 แสดงแทน
     });
-    const fav=document.getElementById('favIcon'); if(fav) fav.href=src;
-  }
-
-  // ใช้ cache ก่อน แต่ถ้าใช้ไม่ได้ ให้ทิ้ง cache แล้วไปหาไฟล์จริงต่อ
-  if(cached){
-    apply(cached, false, function(){
-      try{ localStorage.removeItem(LOGO_CACHE_KEY); }catch(e){}
-      probeCandidates();
-    });
-    return;
-  }
-  probeCandidates();
-  return;
-
-  function probeCandidates(){
-
-    // ไล่ทดสอบทีละตัว แล้วใช้ตัวแรกที่โหลดได้จริง
-    (function tryNext(i){
-      if(i>=candidates.length){
-        ids.forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
-        return;
-      }
-      const url=candidates[i];
-      const probe=new Image();
-      probe.onload=function(){ apply(url, i===candidates.length-1); cacheLogo(url); };
-      probe.onerror=function(){ tryNext(i+1); };
-      probe.src=url;
-    })(0);
-  }
-}
-
-// เก็บสำเนาโลโก้ไว้ในเครื่อง เพื่อให้ครั้งหน้าขึ้นทันที
-function cacheLogo(url){
-  try{
-    fetch(url,{mode:'cors'}).then(r=>r.ok?r.blob():null).then(b=>{
-      if(!b) return;
-      const fr=new FileReader();
-      fr.onload=()=>{ try{ localStorage.setItem(LOGO_CACHE_KEY, JSON.stringify({url:url,data:fr.result})); }catch(e){} };
-      fr.readAsDataURL(b);
-    }).catch(()=>{});
-  }catch(e){}
+  });
+  // ล้าง cache เก่าที่ไม่ใช้แล้ว
+  try{ localStorage.removeItem('nl_logo_cache_v1'); localStorage.removeItem('nl_logo_cache_v2'); }catch(e){}
 }
 
 async function init(){
